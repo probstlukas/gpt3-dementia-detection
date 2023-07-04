@@ -1,3 +1,3 @@
 # Original ADReSSo audio files have an incompatible format. Therefore use: 
-# for i in *.wav; do ffmpeg -i "$i" "fix/$i"; done
+for i in *.wav; do ffmpeg -i "$i" "fix/$i"; done
 # in order to fix the format
