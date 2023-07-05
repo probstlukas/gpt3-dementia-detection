@@ -1,3 +1,11 @@
+""" import openai
+
+openai.api_key = "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"
+
+response = openai.Embedding.create(
+    input="This is an example",
+    engine="text-similarity-davinci-001") """
+
 from sentence_transformers import SentenceTransformer
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -14,3 +22,4 @@ for sentence, embedding in zip(sentences, embeddings):
     print("Sentence:", sentence)
     print("Embedding:", embedding)
     print("")
+
