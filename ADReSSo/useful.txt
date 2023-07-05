@@ -1,5 +1,0 @@
-# Original ADReSSo audio files have an incompatible format. Therefore I used: 
-for i in *.wav; do ffmpeg -i "$i" "$i"; done
-find . -name '*.wav' | xargs ffmpeg -i "$i" "$i"; done
-# in the ADReSSo folder to fix the format for all .wav-files
-find . -name '*.wav' -exec sh -c 'mkdir -p fix && ffmpeg -i "$0" "fix/$(basename "$0")"' {} \;

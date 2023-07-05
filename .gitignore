@@ -1,5 +1,6 @@
 .DS_Store
-
+# Don't store dataset, because it's too large. Git-lfs only allows 1GB for the free plan
+ADReSSo
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
