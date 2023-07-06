@@ -121,5 +121,5 @@ plt.show()
 
 df['embeddings'] = df.text.apply(lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
 
-df.to_csv('processed/embeddings.csv')
+df.to_csv('../processed/embeddings.csv')
 df.head()
