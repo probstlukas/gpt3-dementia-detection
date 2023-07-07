@@ -2,7 +2,14 @@ import pandas as pd
 import openai
 import numpy as np
 from openai.embeddings_utils import distances_from_embeddings
+import config
+# imports
+import pandas as pd
+import numpy as np
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
 
 # ----------------------------------------------------------------------------------------------------------------------
 # FINAL GOAL: create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -52,10 +59,9 @@ def create_context(question, df, max_len):
 
 def answer_question(
         df,
-        model,
         question,
-        max_len,
-        size,
+        model=config.model,
+        max_len=config.max_len,
         debug=False,
         max_tokens=150,
         stop_sequence=None):
@@ -66,7 +72,6 @@ def answer_question(
         question,
         df,
         max_len=max_len,
-        size=size,
     )
     # If debug, print the raw model response
     if debug:
@@ -89,3 +94,19 @@ def answer_question(
     except Exception as e:
         print(e)
         return ""
+
+
+def classify(df):
+    # split data into train and test
+    X_train, X_test, y_train, y_test = train_test_split(
+        list(df.embeddings.values), df.mmse, test_size=0.2, random_state=42
+    )
+
+    # train random forest classifier
+    clf = RandomForestClassifier(n_estimators=100)
+    clf.fit(X_train, y_train)
+    preds = clf.predict(X_test)
+    probas = clf.predict_proba(X_test)
+
+    report = classification_report(y_test, preds)
+    print(report)
