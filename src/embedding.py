@@ -72,10 +72,8 @@ def tokenization(tokenizer):
     display(df)
     plt.show()
 
-    max_tokens = 500
-
     # Function to split the text into chunks of a maximum number of tokens
-    def split_into_many(text, max_tokens=max_tokens, title=None):
+    def split_into_many(text, max_tokens=config.max_tokens, title=None):
         # Split the text into sentences
         sentences = text.split('. ')
 
@@ -118,7 +116,7 @@ def tokenization(tokenizer):
             continue
 
         # If the number of tokens is greater than the max number of tokens, split the text into chunks
-        if row['n_tokens'] > max_tokens:
+        if row['n_tokens'] > config.max_tokens:
             chunks = split_into_many(row['text'], title=row['adressfname'])
             shortened += chunks
 
