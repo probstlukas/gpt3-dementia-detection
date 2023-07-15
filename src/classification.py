@@ -10,6 +10,8 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
+from openai.embeddings_utils import plot_multiclass_precision_recall
+from matplotlib import pyplot as plt
 
 # ----------------------------------------------------------------------------------------------------------------------
 # FINAL GOAL: create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -20,7 +22,7 @@ from sklearn.metrics import classification_report, accuracy_score
 # Turning the embeddings into a NumPy array, which will provide more flexibility in how to use it.
 # It will also flatten the dimension to 1-D, which is the required format for many subsequent operations.
 def embeddings_to_array():
-    df = pd.read_csv('processed/embeddings.csv', index_col=0)
+    df = pd.read_csv(config.embeddings_path, index_col=0)
     df['embeddings'] = df['embeddings'].apply(eval).apply(np.array)
     df.head()
     return df
@@ -98,11 +100,15 @@ def answer_question(
 
 # TODO
 def classify(df):
+    # Drop rows with NaN values in "embedding" or "dx" columns
+    df.dropna(subset=["embeddings", "dx"], inplace=True)
+
     # split data into train and test
     X_train, X_test, y_train, y_test = train_test_split(
-        list(df.embeddings.values), df.mmse, test_size=0.2, random_state=42
+        list(df.embeddings.values), df.dx, test_size=0.2, random_state=42
     )
-
+    print(X_train)
+    print(y_train)
     # train random forest classifier
     clf = RandomForestClassifier(n_estimators=100)
     clf.fit(X_train, y_train)
@@ -111,3 +117,7 @@ def classify(df):
 
     report = classification_report(y_test, preds)
     print(report)
+
+    plot_multiclass_precision_recall(probas, y_test, ['ad', 'cn'], clf)
+    plt.show()
+    

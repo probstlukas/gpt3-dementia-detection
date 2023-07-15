@@ -1,4 +1,5 @@
 import os
+import codecs
 
 from matplotlib import pyplot as plt
 
@@ -15,7 +16,7 @@ def text_to_csv(data_dir):
         if os.path.basename(root) != 'transcription':
             continue
         for file in files:
-            with open(os.path.join(root, file), 'r') as f:
+            with codecs.open(os.path.join(root, file), 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
                 texts.append((file, text))
     print(texts)
@@ -50,7 +51,8 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
 
     # displaying result
     print(output1)
-    output1.to_csv('processed/scraped.csv')
+    output1.to_csv(config.scraped_path)
+    print(f"Successfully created {config.scraped_path}.")
     output1.head()
 
 
@@ -60,7 +62,7 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
 # To stay below the limit, the text in the CSV file needs to be broken down into multiple rows.
 # The existing length of each row will be recorded first to identify which rows need to be split.
 def tokenization(tokenizer):
-    df = pd.read_csv('processed/scraped.csv', index_col=0)
+    df = pd.read_csv(config.scraped_path, index_col=0)
     df.columns = ['adressfname', 'text', 'mmse', 'dx']
 
     # Tokenize the text and save the number of tokens to a new column
@@ -138,5 +140,6 @@ def create_embeddings(df):
     df['embeddings'] = df.text.apply(
         lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
 
-    df.to_csv('processed/embeddings.csv')
+    df.to_csv(config.embeddings_path)
+    print(f"Successfully created {config.embeddings_path}.")
     df.head()
