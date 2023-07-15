@@ -36,6 +36,7 @@ def text_to_csv(data_dir):
     df['text'] = df.adressfname + ". " + remove_newlines(df.text)
     return df
 
+
 def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
     # reading two csv files
     data1 = df
@@ -43,7 +44,7 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
 
     # using merge function by setting how='inner'
     output1 = pd.merge(data1,
-                       data2[['adressfname', 'mmse', 'dx']], # We don't want the key column here
+                       data2[['adressfname', 'mmse', 'dx']],  # We don't want the key column here
                        on='adressfname',
                        how='inner')
 
@@ -141,5 +142,3 @@ def create_embeddings(df):
 
     df.to_csv('processed/embeddings.csv')
     df.head()
-
-
