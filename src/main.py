@@ -11,6 +11,8 @@ def main():
     transcribe_on = False
     embedding_on = False
 
+    input("Type something to test this out: ")
+
     openai.api_key = config.secret_key()
 
     tokenizer = config.set_up()
@@ -29,7 +31,9 @@ def main():
     ### Classification
     df_embeddings_array = classification.embeddings_to_array()
     print(df_embeddings_array)
-    classification.classify(df_embeddings_array)
+    classification.classify_svc(df_embeddings_array)
+    classification.classify_lr(df_embeddings_array)
+    classification.classify_rf(df_embeddings_array)
 
     # ## Example questions print(classification.answer_question(df_embeddings_array, question="Is there any sentence
     # which is grammatically incorrect?"))
