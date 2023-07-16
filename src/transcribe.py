@@ -34,5 +34,5 @@ def transcribe(model, data_dir):
             f.write(transcription)
             print(f"Transcribed {transcription_file}...")
 
-    print("-" * 32)
+    print("=" * 64)
     print("Transcription done.")

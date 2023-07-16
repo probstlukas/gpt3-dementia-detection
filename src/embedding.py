@@ -52,7 +52,7 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
     # displaying result
     print(output1)
     output1.to_csv(config.scraped_path)
-    print(f"Successfully created {config.scraped_path}.")
+    print(f"Writing {config.scraped_path}...")
     output1.head()
 
 
@@ -141,5 +141,5 @@ def create_embeddings(df):
         lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
 
     df.to_csv(config.embeddings_path)
-    print(f"Successfully created {config.embeddings_path}.")
+    print(f"Writing {config.embeddings_path}...")
     df.head()

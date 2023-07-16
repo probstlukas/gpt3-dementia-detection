@@ -1,5 +1,4 @@
 import openai
-
 import config
 import transcribe
 import embedding
@@ -10,7 +9,7 @@ from utils.input_utils import get_user_input
 def main():
     openai.api_key = config.secret_key()
 
-    tokenizer = config.set_up()
+    whisper_model, tokenizer = config.set_up()
 
     ### User input
     yes_choices = ["yes", "y"]
@@ -20,7 +19,7 @@ def main():
                                           + no_choices)
 
     if transcription_prompt in yes_choices:
-        transcribe.transcribe(config.model, config.data_dir)
+        transcribe.transcribe(whisper_model, config.data_dir)
     else:
         print("Transcription skipped.")
 
@@ -38,9 +37,7 @@ def main():
     ### Classification
     print("Initiating classification...")
     df_embeddings_array = classification.embeddings_to_array()
-    classification.classify_svc(df_embeddings_array)
-    classification.classify_lr(df_embeddings_array)
-    classification.classify_rf(df_embeddings_array)
+    classification.classify(df_embeddings_array)
 
 
 if __name__ == "__main__":

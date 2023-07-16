@@ -35,12 +35,15 @@ def classify(df):
     X_train, X_test, y_train, y_test = train_test_split(
         list(df.embeddings.values), df.dx, test_size=0.3, random_state=42  # 70% training and 30% test
     )
-    return X_train, X_test, y_train, y_test
+
+    # Classify using different classifiers
+    classify_svc(X_train, X_test, y_train, y_test)
+    classify_lr(X_train, X_test, y_train, y_test)
+    classify_rf(X_train, X_test, y_train, y_test)
+    print("Classification done.")
 
 
-def classify_svc(df):
-    X_train, X_test, y_train, y_test = classify(df)
-
+def classify_svc(X_train, X_test, y_train, y_test):
     # Create a Classifier
     # TODO: Experiment with different kernels
     clf = SVC(kernel='linear')
@@ -51,18 +54,13 @@ def classify_svc(df):
     # Predict the response for test dataset
     y_pred = clf.predict(X_test)
 
-    report = classification_report(y_test, y_pred)
-    print("=" * 64)
-    print("Classification report using support vector classifier (svc)")
-    print("=" * 64)
-    print(report)
-    print("=" * 64)
-    print("\n")
+    report = classification_report(y_test, y_pred, output_dict=True)
+    df = pd.DataFrame(report).transpose()
+    df.to_csv(config.svc_report_path, index=False)
+    print(f"Writing {config.svc_report_path}...")
 
 
-def classify_lr(df):
-    X_train, X_test, y_train, y_test = classify(df)
-
+def classify_lr(X_train, X_test, y_train, y_test):
     # Create a Classifier
     clf = LogisticRegression(solver='liblinear', random_state=0)
 
@@ -72,19 +70,14 @@ def classify_lr(df):
     # Predict the response for test dataset
     y_pred = clf.predict(X_test)
 
-    report = classification_report(y_test, y_pred)
-    print("=" * 64)
-    print("Classification report using logistic regression (lr)")
-    print("=" * 64)
-    print(report)
-    # Confusion matrix may be helpful as well
-    print("=" * 64)
-    print("\n")
+    # TODO: Confusion matrix may be helpful as well
+    report = classification_report(y_test, y_pred, output_dict=True)
+    df = pd.DataFrame(report).transpose()
+    df.to_csv(config.lr_report_path, index=False)
+    print(f"Writing {config.lr_report_path}...")
 
 
-def classify_rf(df):
-    X_train, X_test, y_train, y_test = classify(df)
-
+def classify_rf(X_train, X_test, y_train, y_test):
     # Create a Classifier
     clf = RandomForestClassifier(n_estimators=100)
 
@@ -97,13 +90,10 @@ def classify_rf(df):
     # Get the class probabilities for the test dataset
     y_prob = clf.predict_proba(X_test)
 
-    report = classification_report(y_test, y_pred)
-    print("=" * 64)
-    print("Classification report using random forest classifier (rf)")
-    print("=" * 64)
-    print(report)
-    print("=" * 64)
-    print("\n")
+    report = classification_report(y_test, y_pred, output_dict=True)
+    df = pd.DataFrame(report).transpose()
+    df.to_csv(config.rf_report_path)
+    print(f"Writing {config.rf_report_path}...")
 
-    plot_multiclass_precision_recall(y_prob, y_test, ['ad', 'cn'], clf)
-    plt.show()
+    #plot_multiclass_precision_recall(y_prob, y_test, ['ad', 'cn'], clf)
+    #plt.show()
