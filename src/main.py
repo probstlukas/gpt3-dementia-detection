@@ -20,6 +20,7 @@ def main():
                                           + no_choices)
 
     if transcription_prompt in yes_choices:
+        print("Initiating transcription...")
         transcribe.transcribe(whisper_model, config.data_dir)
         print("Transcription done.")
     else:
@@ -29,6 +30,7 @@ def main():
                                       + no_choices)
 
     if embedding_prompt in yes_choices:
+        print("Initiating embedding...")
         df_text = embedding.text_to_csv(config.diagnosis_train_data)
         embedding.merge_embeddings_with_scores(df_text, config.diagnosis_train_scores)
         df_tokenization = embedding.tokenization(tokenizer)

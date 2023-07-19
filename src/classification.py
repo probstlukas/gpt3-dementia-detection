@@ -1,16 +1,12 @@
 import config
 import pandas as pd
 import numpy as np
-
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.pipeline import Pipeline
 from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_validate
-
-from sklearn.metrics import classification_report, accuracy_score, make_scorer, recall_score, precision_score, f1_score
+from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision_score, f1_score
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -97,7 +93,7 @@ def classify(df):
 
     df = df.sort_values(by='Set', ascending=False)
     df = df.reset_index(drop=True)
-    print(df)
+    # print(df)
 
     df.to_csv(config.results_path)
     print(f"Writing {config.results_path}...")

@@ -1,8 +1,6 @@
 import os
 import codecs
-
 from matplotlib import pyplot as plt
-
 import config
 import pandas as pd
 from IPython.display import display
