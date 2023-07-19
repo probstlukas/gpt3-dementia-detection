@@ -5,10 +5,12 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from openai.embeddings_utils import plot_multiclass_precision_recall
-from matplotlib import pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_validate
+
+from sklearn.metrics import classification_report, accuracy_score, make_scorer, recall_score, precision_score, f1_score
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -29,71 +31,73 @@ def embeddings_to_array():
 def classify(df):
     # Drop rows with NaN values in "embedding" or "dx" columns
     # TODO: There shouldn't be any empty entries in the first place
-    df.dropna(subset=["embeddings", "dx"], inplace=True)
+    df.dropna(subset=['embeddings', 'dx'], inplace=True)
 
-    # Split dataset into training set and test set
-    X_train, X_test, y_train, y_test = train_test_split(
-        list(df.embeddings.values), df.dx, test_size=0.3, random_state=42  # 70% training and 30% test
-    )
+    #############################
+    # Define the dependent variable that needs to be predicted (labels)
+    y = df['dx'].values
 
-    # Classify using different classifiers
-    classify_svc(X_train, X_test, y_train, y_test)
-    classify_lr(X_train, X_test, y_train, y_test)
-    classify_rf(X_train, X_test, y_train, y_test)
-    print("Classification done.")
+    # Define the independent variable
+    X = list(df['embeddings'].values)
+    # Create models
+    models = [SVC(), LogisticRegression(), RandomForestClassifier()]
+    names = ['SVC', 'LR', 'RF']
 
+    # Define custom scoring metrics
+    scoring = {
+        'accuracy': make_scorer(accuracy_score),
+        'precision': make_scorer(precision_score, average='weighted'),
+        'recall': make_scorer(recall_score, average='weighted'),
+        'f1_score': make_scorer(f1_score, average='macro')
+    }
 
-def classify_svc(X_train, X_test, y_train, y_test):
-    # Create a Classifier
-    # TODO: Experiment with different kernels
-    clf = SVC(kernel='linear')
+    # Prepare the cross-validation procedure
+    cv = KFold(n_splits=10, random_state=42, shuffle=True)
 
-    # Train the model using the training sets
-    clf.fit(X_train, y_train)
+    df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
+    for model, name in zip(models, names):
+        # Perform cross-validation with custom scoring metrics
+        scores = cross_validate(model, X, y, cv=cv, scoring=scoring, return_train_score=True)
+        # print(name)
+        # print(scores)
 
-    # Predict the response for test dataset
-    y_pred = clf.predict(X_test)
+        train_accuracy_mean = round(scores['train_accuracy'].mean(), 3)
+        train_accuracy_std = round(scores['train_accuracy'].std(), 3)
+        train_precision_mean = round(scores['train_precision'].mean(), 3)
+        train_precision_std = round(scores['train_precision'].std(), 3)
+        train_recall_mean = round(scores['train_recall'].mean(), 3)
+        train_recall_std = round(scores['train_recall'].std(), 3)
+        train_f1_mean = round(scores['train_f1_score'].mean(), 3)
+        train_f1_std = round(scores['train_f1_score'].std(), 3)
 
-    report = classification_report(y_test, y_pred, output_dict=True)
-    df = pd.DataFrame(report).transpose()
-    df.to_csv(config.svc_report_path, index=False)
-    print(f"Writing {config.svc_report_path}...")
+        df = pd.concat([df, pd.DataFrame([{'Set': 'Train',
+                                           'Model': name,
+                                           'Accuracy': f"{train_accuracy_mean} "
+                                                       f"({train_accuracy_std})",
+                                           'Precision': f"{train_precision_mean} "
+                                                        f"({train_precision_std})",
+                                           'Recall': f"{train_recall_mean} "
+                                                     f"({train_recall_std})",
+                                           'F1': f"{train_f1_mean} "
+                                                 f"({train_f1_std})",
+                                           }])], ignore_index=True)
 
+        test_accuracy_mean = round(scores['test_accuracy'].mean(), 3)
+        test_precision_mean = round(scores['test_precision'].mean(), 3)
+        test_recall_mean = round(scores['test_recall'].mean(), 3)
+        test_f1_mean = round(scores['test_f1_score'].mean(), 3)
 
-def classify_lr(X_train, X_test, y_train, y_test):
-    # Create a Classifier
-    clf = LogisticRegression(solver='liblinear', random_state=0)
+        df = pd.concat([df, pd.DataFrame([{'Set': 'Test',
+                                           'Model': name,
+                                           'Accuracy': test_accuracy_mean,
+                                           'Precision': test_precision_mean,
+                                           'Recall': test_recall_mean,
+                                           'F1': test_f1_mean
+                                           }])], ignore_index=True)
 
-    # Train the model using the training sets
-    clf.fit(X_train, y_train)
+    df = df.sort_values(by='Set', ascending=False)
+    df = df.reset_index(drop=True)
+    print(df)
 
-    # Predict the response for test dataset
-    y_pred = clf.predict(X_test)
-
-    # TODO: Confusion matrix may be helpful as well
-    report = classification_report(y_test, y_pred, output_dict=True)
-    df = pd.DataFrame(report).transpose()
-    df.to_csv(config.lr_report_path, index=False)
-    print(f"Writing {config.lr_report_path}...")
-
-
-def classify_rf(X_train, X_test, y_train, y_test):
-    # Create a Classifier
-    clf = RandomForestClassifier(n_estimators=100)
-
-    # Train the model using the training sets
-    clf.fit(X_train, y_train)
-
-    # Predict the response for the test dataset
-    y_pred = clf.predict(X_test)
-
-    # Get the class probabilities for the test dataset
-    y_prob = clf.predict_proba(X_test)
-
-    report = classification_report(y_test, y_pred, output_dict=True)
-    df = pd.DataFrame(report).transpose()
-    df.to_csv(config.rf_report_path)
-    print(f"Writing {config.rf_report_path}...")
-
-    #plot_multiclass_precision_recall(y_prob, y_test, ['ad', 'cn'], clf)
-    #plt.show()
+    df.to_csv(config.results_path)
+    print(f"Writing {config.results_path}...")
