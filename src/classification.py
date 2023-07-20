@@ -10,6 +10,8 @@ from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.pipeline import Pipeline
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -42,9 +44,9 @@ def classify(df):
     sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
 
     # Separate majority and minority classes
-    df_majority = df[df.dx == 1]
-    df_minority = df[df.dx == 0]
-    print(df_majority)
+    df_majority = df[df.dx == 1]  # 86 ad datapoints
+    df_minority = df[df.dx == 0]  # 76 cn datapoints
+
     # Upsample minority class
     df_minority_upsampled = resample(df_minority,
                                      replace=True,  # sample with replacement
@@ -55,17 +57,18 @@ def classify(df):
     df = pd.concat([df_majority, df_minority_upsampled])
 
     # Display new class counts
-    print(df.dx.value_counts())
-    sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
+    df.dx.value_counts()
+    # sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
 
-    #############################
     # Define the dependent variable that needs to be predicted (labels)
     y = df['dx'].values
 
     # Define the independent variable
     X = list(df['embeddings'].values)
     # Create models
-    models = [SVC(), LogisticRegression(), RandomForestClassifier()]
+    models = [SVC(kernel='linear', random_state=42),
+              LogisticRegression(random_state=42, max_iter=1000, n_jobs=-1),
+              RandomForestClassifier(random_state=42, n_jobs=-1)]
     names = ['SVC', 'LR', 'RF']
 
     # Define custom scoring metrics
@@ -80,9 +83,14 @@ def classify(df):
     cv = KFold(n_splits=10, random_state=42, shuffle=True)
 
     df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
+    print("Beginning to train the models...")
     for model, name in zip(models, names):
+        # Define the pipeline to include scaling and the model
+        estimators = [('scaler', MinMaxScaler()), ('model', model)]
+        pipeline = Pipeline(estimators)
+
         # Perform cross-validation with custom scoring metrics
-        scores = cross_validate(model, X, y, cv=cv, scoring=scoring, return_train_score=True)
+        scores = cross_validate(pipeline, X, y, cv=cv, scoring=scoring, return_train_score=True)
         # print(name)
         # print(scores)
 
@@ -120,6 +128,7 @@ def classify(df):
                                            'F1': test_f1_mean
                                            }])], ignore_index=True)
 
+    print("Training done.")
     df = df.sort_values(by='Set', ascending=False)
     df = df.reset_index(drop=True)
     # print(df)
