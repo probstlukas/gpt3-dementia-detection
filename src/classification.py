@@ -4,14 +4,16 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.model_selection import cross_validate
-from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision_score, f1_score
+from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision_score, f1_score, ConfusionMatrixDisplay
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.dummy import DummyClassifier
+from sklearn.metrics import confusion_matrix
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -28,8 +30,8 @@ def embeddings_to_array():
     return df
 
 
-# Helper function for specific classify functions
-def classify(df):
+# AD classification using linguistic features (embeddings) from transcribed speech
+def classify_embedding(df):
     # Drop rows with NaN values in "embedding" or "dx" columns
     # TODO: There shouldn't be any empty entries in the first place
     df.dropna(subset=['embeddings', 'dx'], inplace=True)
@@ -38,7 +40,7 @@ def classify(df):
     df['dx'] = [1 if b == 'ad' else 0 for b in df.dx]
 
     # How many data points for each class?
-    print(df['dx'].value_counts())
+    # print(df['dx'].value_counts())
 
     # Understand the data
     sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
@@ -57,26 +59,41 @@ def classify(df):
     df = pd.concat([df_majority, df_minority_upsampled])
 
     # Display new class counts
-    df.dx.value_counts()
-    # sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
+    # print(df.dx.value_counts())
+    sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
 
     # Define the dependent variable that needs to be predicted (labels)
     y = df['dx'].values
-
     # Define the independent variable
     X = list(df['embeddings'].values)
+
+    ### Dummy Classifier
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
+
+    stratified_clf = DummyClassifier(strategy='stratified').fit(X_train, y_train)
+    y_stratified_pred = stratified_clf.predict(X_test)
+
+    cm = confusion_matrix(y_test, y_stratified_pred, labels=stratified_clf.classes_)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=stratified_clf.classes_)
+    disp.plot()
+    # print(stratified_clf.score(X_test, y_test))
+    # print(confusion_matrix(y_test, y_stratified_pred))
+    ###
+
     # Create models
-    models = [SVC(kernel='linear', random_state=42),
-              LogisticRegression(random_state=42, max_iter=1000, n_jobs=-1),
-              RandomForestClassifier(random_state=42, n_jobs=-1)]
+    models = [SVC(kernel='rbf', random_state=42),
+              LogisticRegression(penalty='l2', max_iter=1000, random_state=42, n_jobs=-1),
+              RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, n_jobs=-1)]
     names = ['SVC', 'LR', 'RF']
 
     # Define custom scoring metrics
     scoring = {
-        'accuracy': make_scorer(accuracy_score),
-        'precision': make_scorer(precision_score, average='weighted'),
-        'recall': make_scorer(recall_score, average='weighted'),
-        'f1_score': make_scorer(f1_score, average='macro')
+        'accuracy': make_scorer(accuracy_score),  # How many predictions out of the whole were correct?
+        'precision': make_scorer(precision_score, average='weighted'),  # How many out of the predicted
+        # positives were actually positive?
+        'recall': make_scorer(recall_score, average='weighted'),  # How many positive samples are captured
+        # by the positive predictions?
+        'f1_score': make_scorer(f1_score, average='macro')  # How balanced is the tradeoff between precision and recall?
     }
 
     # Prepare the cross-validation procedure
@@ -132,7 +149,6 @@ def classify(df):
     df = df.sort_values(by='Set', ascending=False)
     df = df.reset_index(drop=True)
     # print(df)
-
     df.to_csv(config.results_path)
     print(f"Writing {config.results_path}...")
     plt.show()

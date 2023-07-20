@@ -45,7 +45,7 @@ def main():
     if classification_prompt in yes_choices:
         print("Initiating classification...")
         df_embeddings_array = classification.embeddings_to_array()
-        classification.classify(df_embeddings_array)
+        classification.classify_embedding(df_embeddings_array)
         print("Classification done.")
     else:
         print("Classification skipped.")
