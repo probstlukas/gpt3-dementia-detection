@@ -7,6 +7,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision_score, f1_score
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.utils import resample
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -28,6 +31,32 @@ def classify(df):
     # Drop rows with NaN values in "embedding" or "dx" columns
     # TODO: There shouldn't be any empty entries in the first place
     df.dropna(subset=['embeddings', 'dx'], inplace=True)
+
+    # Transform into binary classification
+    df['dx'] = [1 if b == 'ad' else 0 for b in df.dx]
+
+    # How many data points for each class?
+    print(df['dx'].value_counts())
+
+    # Understand the data
+    sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
+
+    # Separate majority and minority classes
+    df_majority = df[df.dx == 1]
+    df_minority = df[df.dx == 0]
+    print(df_majority)
+    # Upsample minority class
+    df_minority_upsampled = resample(df_minority,
+                                     replace=True,  # sample with replacement
+                                     n_samples=86,  # to match majority class
+                                     random_state=42)  # reproducible results
+
+    # Combine majority class with upsampled minority class
+    df = pd.concat([df_majority, df_minority_upsampled])
+
+    # Display new class counts
+    print(df.dx.value_counts())
+    sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
 
     #############################
     # Define the dependent variable that needs to be predicted (labels)
@@ -97,3 +126,4 @@ def classify(df):
 
     df.to_csv(config.results_path)
     print(f"Writing {config.results_path}...")
+    plt.show()
