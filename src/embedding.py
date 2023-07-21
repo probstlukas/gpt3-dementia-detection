@@ -3,7 +3,6 @@ import codecs
 from matplotlib import pyplot as plt
 import config
 import pandas as pd
-from IPython.display import display
 import openai
 
 
@@ -69,7 +68,6 @@ def tokenization(tokenizer):
     # Visualize the distribution of the number of tokens per row using a histogram
     df.n_tokens.hist()
 
-    display(df)
     plt.show()
 
     # Function to split the text into chunks of a maximum number of tokens

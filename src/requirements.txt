@@ -1,2 +1,5 @@
-openai_whisper==20230314
-sentence_transformers==2.2.2
+openai_whisper
+openai
+matplotlib
+pandas
+seaborn
