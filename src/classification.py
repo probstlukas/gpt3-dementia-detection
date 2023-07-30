@@ -124,9 +124,9 @@ def classify_embedding(dataset, _n_splits):
     X = list(dataset['embeddings'].values)
 
     # Create models
-    models = [SVC(kernel='rbf', random_state=42),
-              LogisticRegression(penalty='l2', max_iter=1000, random_state=42, n_jobs=-1),
-              RandomForestClassifier(n_estimators=1, max_depth=5, random_state=42, n_jobs=-1)]
+    models = [SVC(),  # before tuning: kernel='rbf', random_state=42
+              LogisticRegression(),  # before tuning: penalty='l2', max_iter=1000, random_state=42, n_jobs=-1
+              RandomForestClassifier()]  # before tuning: n_estimators=1, max_depth=5, random_state=42, n_jobs=-1
     names = ['SVC', 'LR', 'RF']
 
     # Split the dataset into k equal partitions
@@ -134,17 +134,54 @@ def classify_embedding(dataset, _n_splits):
 
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
     print("Beginning to train models using GPT embeddings...")
+
+    # Create the parameter grid
+    svc_param_grid = {
+        'C': [0.1, 1, 10, 100],
+        'gamma': [1, 0.1, 0.01, 0.001],
+        'kernel': ['rbf', 'poly', 'sigmoid']
+    }
+    lr_param_grid = [
+        {'penalty': ['l1', 'l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['liblinear'],
+         'max_iter': [100, 200, 500, 1000]},
+        {'penalty': ['l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['lbfgs'],
+         'max_iter': [200, 500, 1000]},
+    ]
+    rf_param_grid = {
+        'n_estimators': [25, 50, 100, 150],
+        'max_features': ['sqrt', 'log2', None],
+        'max_depth': [3, 6, 9],
+        'max_leaf_nodes': [3, 6, 9],
+    }
     for model, name in zip(models, names):
         # It's not necessary to scale the GPT embeddings before using them.
         # They are already normalised and are in the vector space with a certain distribution.
 
-        # Perform cross-validation with custom scoring metrics
-        results = cross_validation(model, X, y, cv)
+        # Tune hyperparameters with GridSearchCV
+        best_params = None
+        if name == 'SVC':
+            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
+        elif name == 'LR':
+            grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
+        elif name == 'RF':
+            grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
+        model.set_params(**best_params)
 
+        # Perform cross-validation with custom scoring metrics and best params
+        results = cross_validation(model, X, y, cv)
         results_df = results_to_df(name, results, results_df)
 
-        # visualize_results(_n_splits, name, results)
-
+        visualize_results(_n_splits, name, results)
     print("Training using GPT embeddings done.")
     results_df = results_df.sort_values(by='Set', ascending=False)
     results_df = results_df.reset_index(drop=True)
