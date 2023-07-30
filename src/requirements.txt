@@ -3,3 +3,5 @@ openai
 matplotlib
 pandas
 seaborn
+opensmile
+audb

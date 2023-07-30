@@ -1,14 +1,11 @@
 import os
+import config
+from utils.fetch_audio import fetch_audio_files
 
 
 def transcribe(model, data_dir):
     # Get a list of all the audio files in the data folder
-    audio_files = []
-    for root, dirs, files in os.walk(data_dir):
-        for file in files:
-            if file.endswith('.wav'):
-                audio_files.append(os.path.join(root, file))
-    print(f"Successfully fetched {len(audio_files)} (.wav) audio files!")
+    audio_files = fetch_audio_files(config.diagnosis_train_data)
 
     # Loop over all the audio files in the folder
     for audio_file_path in audio_files:

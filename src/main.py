@@ -45,7 +45,8 @@ def main():
     if classification_prompt in yes_choices:
         print("Initiating classification...")
         df_embeddings_array = classification.embeddings_to_array()
-        classification.classify_embedding(df_embeddings_array)
+        classification.classify_embedding(df_embeddings_array, 10)
+        #classification.classify_acoustic()
         print("Classification done.")
     else:
         print("Classification skipped.")
