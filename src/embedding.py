@@ -4,6 +4,12 @@ from matplotlib import pyplot as plt
 import config
 import pandas as pd
 import openai
+import logging
+
+# Configure logging to display messages in the terminal
+logging.basicConfig(level=logging.INFO)
+# Create a logger instance for this file
+log = logging.getLogger("Embedding")
 
 
 # Saving the raw text into a CSV file
@@ -16,7 +22,6 @@ def text_to_csv(data_dir):
             with codecs.open(os.path.join(root, file), 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
                 texts.append((file, text))
-    print(texts)
 
     # Blank empty lines can clutter the text files and make them harder to process.
     # This function removes those lines and tidies up the files.
@@ -45,11 +50,8 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
                        data2[['adressfname', 'mmse', 'dx']],  # We don't want the key column here
                        on='adressfname',
                        how='inner')
-
-    # displaying result
-    print(output1)
     output1.to_csv(config.scraped_path)
-    print(f"Writing {config.scraped_path}...")
+    log.info(f"Writing {config.scraped_path}...")
     output1.head()
 
 
@@ -137,5 +139,5 @@ def create_embeddings(df):
         lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
 
     df.to_csv(config.embeddings_path)
-    print(f"Writing {config.embeddings_path}...")
+    log.info(f"Writing {config.embeddings_path}...")
     df.head()

@@ -21,7 +21,7 @@ def transcribe(model, data_dir):
         # removed!
         else:
             if os.path.isfile(transcription_file):
-                print(f"Skipped {transcription_file}, because it's already transcribed.")
+                log.info(f"Skipped {transcription_file}, because it's already transcribed.")
             continue
 
         result = model.transcribe(audio_file_path, fp16=False)
@@ -29,4 +29,4 @@ def transcribe(model, data_dir):
 
         with open(transcription_file, 'w') as f:
             f.write(transcription)
-            print(f"Transcribed {transcription_file}...")
+            log.info(f"Transcribed {transcription_file}...")

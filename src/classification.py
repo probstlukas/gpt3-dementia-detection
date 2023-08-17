@@ -4,20 +4,20 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import KFold, train_test_split, GridSearchCV, RandomizedSearchCV
-from sklearn.model_selection import cross_validate
-from sklearn.metrics import accuracy_score, make_scorer, recall_score, precision_score, f1_score, ConfusionMatrixDisplay
-import seaborn as sns
+from sklearn.model_selection import (
+    KFold, train_test_split, GridSearchCV, cross_validate
+)
+from sklearn.metrics import (
+    accuracy_score, make_scorer, recall_score, precision_score, f1_score
+)
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.pipeline import Pipeline
 from sklearn.dummy import DummyClassifier
-from sklearn.metrics import confusion_matrix
-import opensmile
-from utils.fetch_audio import fetch_audio_files
-from pathlib import Path
-from scipy.stats import uniform, randint
+
+# Configure logging to display messages in the terminal
+logging.basicConfig(level=logging.INFO)
+# Create a logger instance for this file
+log = logging.getLogger("Classification")
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -123,17 +123,18 @@ def classify_embedding(dataset, _n_splits):
     # Define the independent variable
     X = list(dataset['embeddings'].values)
 
+    baseline_score = dummy_stratified_clf(X, y)
+    log.info("Baseline performance: ", baseline_score)
+
     # Create models
-    models = [SVC(),  # before tuning: kernel='rbf', random_state=42
-              LogisticRegression(),  # before tuning: penalty='l2', max_iter=1000, random_state=42, n_jobs=-1
-              RandomForestClassifier()]  # before tuning: n_estimators=1, max_depth=5, random_state=42, n_jobs=-1
+    models = [SVC(), LogisticRegression(), RandomForestClassifier()]
     names = ['SVC', 'LR', 'RF']
 
     # Split the dataset into k equal partitions
     cv = KFold(n_splits=_n_splits, random_state=42, shuffle=True)
 
+    # Prepare dataframe for results
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
-    print("Beginning to train models using GPT embeddings...")
 
     # Create the parameter grid
     svc_param_grid = {
@@ -141,6 +142,7 @@ def classify_embedding(dataset, _n_splits):
         'gamma': [1, 0.1, 0.01, 0.001],
         'kernel': ['rbf', 'poly', 'sigmoid']
     }
+
     lr_param_grid = [
         {'penalty': ['l1', 'l2'],
          'C': np.logspace(-4, 4, 20),
@@ -151,12 +153,16 @@ def classify_embedding(dataset, _n_splits):
          'solver': ['lbfgs'],
          'max_iter': [200, 500, 1000]},
     ]
+
     rf_param_grid = {
         'n_estimators': [25, 50, 100, 150],
         'max_features': ['sqrt', 'log2', None],
         'max_depth': [3, 6, 9],
         'max_leaf_nodes': [3, 6, 9],
     }
+
+    log.info("Beginning to train models using GPT embeddings...")
+
     for model, name in zip(models, names):
         # It's not necessary to scale the GPT embeddings before using them.
         # They are already normalised and are in the vector space with a certain distribution.
@@ -181,39 +187,54 @@ def classify_embedding(dataset, _n_splits):
         results = cross_validation(model, X, y, cv)
         results_df = results_to_df(name, results, results_df)
 
-        visualize_results(_n_splits, name, results)
-    print("Training using GPT embeddings done.")
+        visualize_results(_n_splits, name, results, config.embedding_results_dir)
+
+    log.info("Training using GPT embeddings done.")
+
+    # Adjust resulting dataframe
     results_df = results_df.sort_values(by='Set', ascending=False)
     results_df = results_df.reset_index(drop=True)
-    results_df.to_csv(config.results_path)
-    print(f"Writing {config.results_path}...")
+
+    # Save results to csv
+    embedding_results_file = (config.embedding_results_dir / 'embedding_results.csv').resolve()
+    results_df.to_csv(embedding_results_file)
+
+    log.info(f"Writing {embedding_results_file}...")
 
 
-def visualize_results(_n_splits, name, results):
+def visualize_results(_n_splits, name, results, save_dir):
+    plot_accuracy_path = (save_dir / f'plot_accuracy_{name}.png').resolve()
+    plot_precision_path = (save_dir / f'plot_precision_{name}.png').resolve()
+    plot_recall_path = (save_dir / f'plot_recall_{name}.png').resolve()
+    plot_f1_path = (save_dir / f'plot_precision_{name}.png').resolve()
     # Plot Accuracy Result
     plot_result(name,
                 "Accuracy",
                 f"Accuracy scores in {_n_splits} Folds",
                 results["train_accuracy"],
-                results["test_accuracy"])
+                results["test_accuracy"],
+                plot_accuracy_path)
     # Plot Precision Result
     plot_result(name,
                 "Precision",
                 f"Precision scores in {_n_splits} Folds",
                 results["train_precision"],
-                results["test_precision"])
+                results["test_precision"],
+                plot_precision_path)
     # Plot Recall Result
     plot_result(name,
                 "Recall",
                 f"Recall scores in {_n_splits} Folds",
                 results["train_recall"],
-                results["test_recall"])
+                results["test_recall"],
+                plot_recall_path)
     # Plot F1-Score Result
     plot_result(name,
                 "F1",
                 f"F1 Scores in {_n_splits} Folds",
                 results["train_f1"],
-                results["test_f1"])
+                results["test_f1"],
+                plot_f1_path)
 
 
 def results_to_df(name, results, results_df):
@@ -240,7 +261,7 @@ def results_to_df(name, results, results_df):
 
 
 # Grouped Bar Chart for both training and validation data
-def plot_result(x_label, y_label, plot_title, train_data, val_data):
+def plot_result(x_label, y_label, plot_title, train_data, val_data, savefig_path=None):
     """Function to plot a grouped bar chart showing the training and validation
       results of the ML model in each fold after applying K-fold cross-validation.
      Parameters
@@ -253,11 +274,13 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data):
      plot_title: str,
         This is the title of the plot e.g 'Accuracy Plot'
 
-     train_result: list, array
+     train_data: list, array
         This is the list containing either training precision, accuracy, or f1 score.
 
-     val_result: list, array
+     val_data: list, array
         This is the list containing either validation precision, accuracy, or f1 score.
+     savefig_path: str
+        Save figures to this path if not empty (by default)
      Returns
      -------
      The function returns a Grouped Barchart showing the training and validation result
@@ -265,7 +288,7 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data):
     """
 
     # Set size of plot
-    plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 6))
     labels = ["1st Fold", "2nd Fold", "3rd Fold", "4th Fold", "5th Fold", "6th Fold", "7th Fold", "8th Fold",
               "9th Fold", "10th Fold"]
     X_axis = np.arange(len(labels))
@@ -279,6 +302,8 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data):
     plt.legend()
     plt.grid(True)
     plt.show()
+    if savefig_path is not None:
+        fig.savefig(savefig_path, dpi=fig.dpi)
 
 
 def data_preprocessing(df):
@@ -297,7 +322,7 @@ def data_preprocessing(df):
     # Separate majority and minority classes
     df_majority = df[df.dx == 1]  # 87 ad datapoints
     df_minority = df[df.dx == 0]  # 79 cn datapoints
-    print(len(df_minority))
+    # print(len(df_minority))
     # Undersample majority class
     df_majority_downsampled = resample(df_majority,
                                        replace=False,  # sample without replacement
@@ -314,30 +339,25 @@ def data_preprocessing(df):
 
 
 def dummy_stratified_clf(X, y):
-    """ Dummy Classifier """
+    """
+    DummyClassifier makes predictions that ignore the input features.
+
+    This classifier serves as a simple baseline to compare against other more complex classifiers.
+    It gives us a measure of “baseline” performance — i.e. the success rate one should expect to achieve even
+    if simply guessing.
+    """
     X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
     stratified_clf = DummyClassifier(strategy='stratified').fit(X_train, y_train)
-    y_stratified_pred = stratified_clf.predict(X_test)
-    cm = confusion_matrix(y_test, y_stratified_pred, labels=stratified_clf.classes_)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=stratified_clf.classes_)
-    disp.plot()
-    print(stratified_clf.score(X_test, y_test))
-    print(confusion_matrix(y_test, y_stratified_pred))
-    ###
+
+    return stratified_clf.score(X_test, y_test)
 
 
-"""
+
 # AD classification using acoustic features from OpenSMILE
 def classify_acoustic():
-    # Load the CSV file into a pandas DataFrame
-    df = pd.read_csv(config.diagnosis_train_scores)
-    # Perform preprocessing of data
-    data_preprocessing(df)
-    file_label_dict = dict(zip(df["adressfname"], df["dx"]))
+    dataset = data_preprocessing(dataset)
 
-    # Display new class counts
-    # print(df.dx.value_counts())
-    sns.countplot(x='dx', data=df)  # ad - diagnosed   cn - control group
+    file_label_dict = dict(zip(dataset["adressfname"], dataset["dx"]))
 
     # Create an instance of the openSMILE feature extractor
     smile_lowlevel = opensmile.Smile(
@@ -352,8 +372,7 @@ def classify_acoustic():
 
     # Fetch the audio files
     audio_files = fetch_audio_files(config.diagnosis_train_data)
-    print(audio_files)
-    print(len(audio_files))
+
     # Create lists to hold the filenames, labels, and feature vectors
     filenames = []
     labels = []
@@ -363,9 +382,7 @@ def classify_acoustic():
     # Iterate through audio files and extract features
     for audio_file in audio_files:
         filename = Path(audio_file).stem
-        print(filename)
         label = file_label_dict.get(filename)
-        print(label)
 
         # Check if the label is not None (i.e., the filename was found in the DataFrame)
         if label is not None:
@@ -374,20 +391,15 @@ def classify_acoustic():
 
             # Extract Low-Level Descriptors using openSMILE
             feature_vector_lowlevel = smile_lowlevel.process_file(audio_file)
-            print(feature_vector_lowlevel)
             feature_vectors_lowlevel.append(feature_vector_lowlevel)
 
             # Extract Functionals features using openSMILE
             feature_vector_functionals = smile_functionals.process_file(audio_file)
-            print(feature_vector_functionals)
             feature_vectors_functionals.append(feature_vector_functionals)
 
-    print(feature_vectors_lowlevel)
-    print(feature_vectors_functionals)
     # Combine Low-Level Descriptors and Functionals features
     feature_vectors_combined = [lowlevel + functionals for lowlevel, functionals in
                                 zip(feature_vectors_lowlevel, feature_vectors_functionals)]
-    print(feature_vectors_combined)
 
     # Define the dependent variable that needs to be predicted (labels)
     y = df['dx'].values
@@ -395,75 +407,70 @@ def classify_acoustic():
     X = feature_vectors_combined
 
     # Create models
-    models = [SVC(kernel='rbf', random_state=42),
-              LogisticRegression(penalty='l2', max_iter=1000, random_state=42, n_jobs=-1),
-              RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42, n_jobs=-1)]
+    models = [SVC(), LogisticRegression(), RandomForestClassifier()]
     names = ['SVC', 'LR', 'RF']
 
-    # Define custom scoring metrics
-    scoring = {
-        'accuracy': make_scorer(accuracy_score),  # How many predictions out of the whole were correct?
-        'precision': make_scorer(precision_score, average='weighted'),  # How many out of the predicted
-        # positives were actually positive?
-        'recall': make_scorer(recall_score, average='weighted'),  # How many positive samples are captured
-        # by the positive predictions?
-        'f1_score': make_scorer(f1_score, average='macro')  # How balanced is the tradeoff between precision and recall?
+    # Split the dataset into k equal partitions
+    cv = KFold(n_splits=_n_splits, random_state=42, shuffle=True)
+
+    # Prepare dataframe for results
+    results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
+
+    # Create the parameter grid
+    svc_param_grid = {
+        'C': [0.1, 1, 10, 100],
+        'gamma': [1, 0.1, 0.01, 0.001],
+        'kernel': ['rbf', 'poly', 'sigmoid']
     }
 
-    # Prepare the cross-validation procedure
-    cv = KFold(n_splits=10, random_state=42, shuffle=True)
+    lr_param_grid = [
+        {'penalty': ['l1', 'l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['liblinear'],
+         'max_iter': [100, 200, 500, 1000]},
+        {'penalty': ['l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['lbfgs'],
+         'max_iter': [200, 500, 1000]},
+    ]
 
-    df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
-    print("Beginning to train models using acoustic features...")
+    rf_param_grid = {
+        'n_estimators': [25, 50, 100, 150],
+        'max_features': ['sqrt', 'log2', None],
+        'max_depth': [3, 6, 9],
+        'max_leaf_nodes': [3, 6, 9],
+    }
+
+    log.info("Beginning to train models using acoustic embeddings...")
+
     for model, name in zip(models, names):
-        # Define the pipeline to include scaling and the model
-        estimators = [('scaler', MinMaxScaler()), ('model', model)]
-        pipeline = Pipeline(estimators)
+        # TODO: scaling?
 
-        # Perform cross-validation with custom scoring metrics
-        scores = cross_validate(pipeline, X, y, cv=cv, scoring=scoring, return_train_score=True)
-        # print(name)
-        # print(scores)
+        # Tune hyperparameters with GridSearchCV
+        if name == 'SVC':
+            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+        elif name == 'LR':
+            grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+        elif name == 'RF':
+            grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+        grid_search.fit(X, y)
+        best_params = grid_search.best_params_
+        model.set_params(**best_params)
 
-        train_accuracy_mean = round(scores['train_accuracy'].mean(), 3)
-        train_accuracy_std = round(scores['train_accuracy'].std(), 3)
-        train_precision_mean = round(scores['train_precision'].mean(), 3)
-        train_precision_std = round(scores['train_precision'].std(), 3)
-        train_recall_mean = round(scores['train_recall'].mean(), 3)
-        train_recall_std = round(scores['train_recall'].std(), 3)
-        train_f1_mean = round(scores['train_f1_score'].mean(), 3)
-        train_f1_std = round(scores['train_f1_score'].std(), 3)
+        # Perform cross-validation with custom scoring metrics and best params
+        results = cross_validation(model, X, y, cv)
+        results_df = results_to_df(name, results, results_df)
 
-        df = pd.concat([df, pd.DataFrame([{'Set': 'Train',
-                                           'Model': name,
-                                           'Accuracy': f"{train_accuracy_mean} "
-                                                       f"({train_accuracy_std})",
-                                           'Precision': f"{train_precision_mean} "
-                                                        f"({train_precision_std})",
-                                           'Recall': f"{train_recall_mean} "
-                                                     f"({train_recall_std})",
-                                           'F1': f"{train_f1_mean} "
-                                                 f"({train_f1_std})",
-                                           }])], ignore_index=True)
+        visualize_results(_n_splits, name, results, config.acoustic_results_dir)
 
-        test_accuracy_mean = round(scores['test_accuracy'].mean(), 3)
-        test_precision_mean = round(scores['test_precision'].mean(), 3)
-        test_recall_mean = round(scores['test_recall'].mean(), 3)
-        test_f1_mean = round(scores['test_f1_score'].mean(), 3)
+    log.info("Training using acoustic features done.")
 
-        df = pd.concat([df, pd.DataFrame([{'Set': 'Test',
-                                           'Model': name,
-                                           'Accuracy': test_accuracy_mean,
-                                           'Precision': test_precision_mean,
-                                           'Recall': test_recall_mean,
-                                           'F1': test_f1_mean
-                                           }])], ignore_index=True)
+    # Adjust resulting dataframe
+    results_df = results_df.sort_values(by='Set', ascending=False)
+    results_df = results_df.reset_index(drop=True)
 
-    print("Training using acoustic features done.")
-    df = df.sort_values(by='Set', ascending=False)
-    df = df.reset_index(drop=True)
-    # print(df)
-    df.to_csv(config.results_path)
-    print(f"Writing {config.results_path}...")
-    plt.show()
-    """
+    # Save results to csv
+    acoustic_results_file = (config.acoustic_results_dir / 'acoustic_results.csv').resolve()
+    results_df.to_csv(acoustic_results_file)
+
+    log.info(f"Writing {acoustic_results_file}...")
