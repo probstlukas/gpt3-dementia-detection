@@ -1,32 +1,34 @@
-import os
 import config
 from utils.fetch_audio import fetch_audio_files
+import logging
+from pathlib import Path
+
+# Configure logging to display messages in the terminal
+logging.basicConfig(level=logging.INFO)
+# Create a logger instance for this file
+log = logging.getLogger("Transcribe")
 
 
-def transcribe(model, data_dir):
+def transcribe(model):
     # Get a list of all the audio files in the data folder
     audio_files = fetch_audio_files(config.diagnosis_train_data)
+    log.debug(audio_files)
+
+    transcription_dir = (config.transcription_path / config.whisper_model_name).resolve()
 
     # Loop over all the audio files in the folder
-    for audio_file_path in audio_files:
+    for audio_file in audio_files:
+        # Get base filename
+        filename = Path(audio_file).stem
+        transcription_file = (transcription_dir / filename).resolve()
 
-        transcription_dir = os.path.join(os.path.dirname(audio_file_path), 'transcription')
-        filename = os.path.splitext(os.path.basename(audio_file_path))[0]
-        transcription_file = os.path.join(transcription_dir, filename)
+        # Do not transcribe again if the transcription exists already
+        if not transcription_file.exists():
+            result = model.transcribe(audio_file, fp16=False)
+            transcription_str = str(result["text"])
 
-        # Check if the respective transcription folder exists, otherwise create it
-        if not os.path.exists(transcription_dir):
-            os.makedirs(transcription_dir)
-        # Check if file was already transcribed, then skip. Note: if you want to use a different model, this should be
-        # removed!
-        else:
-            if os.path.isfile(transcription_file):
-                log.info(f"Skipped {transcription_file}, because it's already transcribed.")
-            continue
+            # Create subdirs if not existent
+            transcription_file.parent.mkdir(parents=True, exist_ok=True)
 
-        result = model.transcribe(audio_file_path, fp16=False)
-        transcription = str(result["text"])
-
-        with open(transcription_file, 'w') as f:
-            f.write(transcription)
+            transcription_file.write_text(transcription_str)
             log.info(f"Transcribed {transcription_file}...")

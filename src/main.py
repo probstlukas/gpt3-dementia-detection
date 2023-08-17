@@ -27,7 +27,7 @@ def main():
 
     if transcription_prompt in yes_choices:
         log.info("Initiating transcription...")
-        transcribe.transcribe(whisper_model, config.data_dir)
+        transcribe.transcribe(whisper_model)
         log.info("Transcription done.")
     else:
         log.info("Transcription skipped.")

@@ -13,6 +13,7 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
 from sklearn.dummy import DummyClassifier
+import logging
 
 # Configure logging to display messages in the terminal
 logging.basicConfig(level=logging.INFO)

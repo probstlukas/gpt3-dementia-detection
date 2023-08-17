@@ -1,4 +1,10 @@
 import os
+import logging
+
+# Configure logging to display messages in the terminal
+logging.basicConfig(level=logging.INFO)
+# Create a logger instance for this file
+log = logging.getLogger("Fetch audio")
 
 
 def fetch_audio_files(path):
