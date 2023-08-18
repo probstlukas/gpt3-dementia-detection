@@ -1,4 +1,5 @@
 import config
+from config import logger
 import pandas as pd
 import numpy as np
 from sklearn.svm import SVC
@@ -13,12 +14,9 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
 from sklearn.dummy import DummyClassifier
-import logging
-
-# Configure logging to display messages in the terminal
-logging.basicConfig(level=logging.INFO)
-# Create a logger instance for this file
-log = logging.getLogger("Classification")
+import pickle
+from pathlib import Path
+import sys
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -36,8 +34,8 @@ def embeddings_to_array():
 
 
 # K-Fold Cross-Validation
-def cross_validation(model, _X, _y, _cv):
-    """ Function to perform 5 Folds Cross-Validation
+def cross_validation(name, model, _X, _y, _cv):
+    """ Function to perform K-Fold Cross-Validation
      Parameters
      ----------
     model: Python Class, default=None
@@ -69,6 +67,10 @@ def cross_validation(model, _X, _y, _cv):
                             scoring=_scoring,
                             return_train_score=True)
 
+    # Get size of the serialized model in bytes
+    model_size = len(pickle.dumps(model, -1))
+    logger.debug(f"Model size of {name}: {model_size} bytes.")
+
     train_accuracy = scores['test_accuracy']
     train_accuracy_mean = round(train_accuracy.mean(), 3)
     train_accuracy_std = round(train_accuracy.std(), 3)
@@ -91,7 +93,9 @@ def cross_validation(model, _X, _y, _cv):
     test_f1 = scores['test_f1_score']
     test_f1_mean = round(test_f1.mean(), 3)
 
-    return {'train_accuracy': train_accuracy,
+    return {'model_size': model_size,
+
+            'train_accuracy': train_accuracy,
             'train_accuracy_mean': train_accuracy_mean,
             'train_accuracy_std': train_accuracy_std,
             'train_precision': train_precision,
@@ -125,7 +129,7 @@ def classify_embedding(dataset, _n_splits):
     X = list(dataset['embeddings'].values)
 
     baseline_score = dummy_stratified_clf(X, y)
-    log.info("Baseline performance: ", baseline_score)
+    logger.info(f"Baseline performance of the dummy classifier: {baseline_score}")
 
     # Create models
     models = [SVC(), LogisticRegression(), RandomForestClassifier()]
@@ -136,6 +140,7 @@ def classify_embedding(dataset, _n_splits):
 
     # Prepare dataframe for results
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
+    models_size_df = pd.DataFrame(columns=['Model', 'Size'])
 
     # Create the parameter grid
     svc_param_grid = {
@@ -162,11 +167,15 @@ def classify_embedding(dataset, _n_splits):
         'max_leaf_nodes': [3, 6, 9],
     }
 
-    log.info("Beginning to train models using GPT embeddings...")
+    logger.info("Beginning to train models using GPT embeddings...")
+
+    total_models_size = 0
 
     for model, name in zip(models, names):
         # It's not necessary to scale the GPT embeddings before using them.
         # They are already normalised and are in the vector space with a certain distribution.
+
+        logger.info(f"Initiating {name}...")
 
         # Tune hyperparameters with GridSearchCV
         best_params = None
@@ -185,27 +194,45 @@ def classify_embedding(dataset, _n_splits):
         model.set_params(**best_params)
 
         # Perform cross-validation with custom scoring metrics and best params
-        results = cross_validation(model, X, y, cv)
+        results = cross_validation(name, model, X, y, cv)
         results_df = results_to_df(name, results, results_df)
 
-        visualize_results(_n_splits, name, results, config.embedding_results_dir)
+        visualize_results(_n_splits, name, results, (config.embedding_results_dir / "plots").resolve())
 
-    log.info("Training using GPT embeddings done.")
+        models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': model,
+                                                       'Size': results['model_size'],
+                                                       }])], ignore_index=True)
+        total_models_size += results['model_size']
+
+    logger.info(f"Total size of all models: {total_models_size}.")
+    logger.info("Training using GPT embeddings done.")
 
     # Adjust resulting dataframe
     results_df = results_df.sort_values(by='Set', ascending=False)
     results_df = results_df.reset_index(drop=True)
-
+    # Add baseline score to dataframe
+    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
+                                                       'Model': 'Dummy',
+                                                       'Accuracy': baseline_score,
+                                                       }])], ignore_index=True)
     # Save results to csv
     embedding_results_file = (config.embedding_results_dir / 'embedding_results.csv').resolve()
     results_df.to_csv(embedding_results_file)
+    logger.info(f"Writing {embedding_results_file}...")
 
-    log.info(f"Writing {embedding_results_file}...")
+    # Add total size to models_size
+    models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': 'Total',
+                                                           'Size': total_models_size,
+                                                           }])], ignore_index=True)
+    # Save results to csv
+    models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
+    models_size_df.to_csv(models_size_file)
+    logger.info(f"Writing {models_size_file}...")
 
 
 def visualize_results(_n_splits, name, results, save_dir):
-    plot_accuracy_path = (save_dir / f'plot_accuracy_{name}.png').resolve()
-    plot_precision_path = (save_dir / f'plot_precision_{name}.png').resolve()
+    plot_accuracy_path = (save_dir  / f'plot_accuracy_{name}.png').resolve()
+    plot_precision_path = (save_dir  / f'plot_precision_{name}.png').resolve()
     plot_recall_path = (save_dir / f'plot_recall_{name}.png').resolve()
     plot_f1_path = (save_dir / f'plot_precision_{name}.png').resolve()
     # Plot Accuracy Result
@@ -358,7 +385,7 @@ def dummy_stratified_clf(X, y):
 def classify_acoustic():
     dataset = data_preprocessing(dataset)
 
-    file_label_dict = dict(zip(dataset["adressfname"], dataset["dx"]))
+    file_label_dict = dict(zip(dataset['adressfname'], dataset['dx']))
 
     # Create an instance of the openSMILE feature extractor
     smile_lowlevel = opensmile.Smile(
@@ -442,7 +469,7 @@ def classify_acoustic():
         'max_leaf_nodes': [3, 6, 9],
     }
 
-    log.info("Beginning to train models using acoustic embeddings...")
+    logger.info("Beginning to train models using acoustic embeddings...")
 
     for model, name in zip(models, names):
         # TODO: scaling?
@@ -464,7 +491,7 @@ def classify_acoustic():
 
         visualize_results(_n_splits, name, results, config.acoustic_results_dir)
 
-    log.info("Training using acoustic features done.")
+    logger.info("Training using acoustic features done.")
 
     # Adjust resulting dataframe
     results_df = results_df.sort_values(by='Set', ascending=False)
@@ -474,4 +501,4 @@ def classify_acoustic():
     acoustic_results_file = (config.acoustic_results_dir / 'acoustic_results.csv').resolve()
     results_df.to_csv(acoustic_results_file)
 
-    log.info(f"Writing {acoustic_results_file}...")
+    logger.info(f"Writing {acoustic_results_file}...")

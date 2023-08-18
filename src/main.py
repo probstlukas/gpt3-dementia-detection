@@ -1,15 +1,10 @@
 import openai
 import config
+from config import logger
 import transcribe
 import embedding
 import classification
 from utils.input_utils import get_user_input
-import logging
-
-# Configure logging to display messages in the terminal
-logging.basicConfig(level=logging.INFO)
-# Create a logger instance for this file
-log = logging.getLogger("Main")
 
 
 def main():
@@ -26,36 +21,36 @@ def main():
                                           + no_choices)
 
     if transcription_prompt in yes_choices:
-        log.info("Initiating transcription...")
+        logger.info("Initiating transcription...")
         transcribe.transcribe(whisper_model)
-        log.info("Transcription done.")
+        logger.info("Transcription done.")
     else:
-        log.info("Transcription skipped.")
+        logger.info("Transcription skipped.")
 
     embedding_prompt = get_user_input("Would you like the embeddings to be (re-)created? (yes/no): ", yes_choices
                                       + no_choices)
 
     if embedding_prompt in yes_choices:
-        log.info("Initiating embedding...")
+        logger.info("Initiating embedding...")
         df_text = embedding.text_to_csv(config.diagnosis_train_data)
         embedding.merge_embeddings_with_scores(df_text, config.diagnosis_train_scores)
         df_tokenization = embedding.tokenization(tokenizer)
         embedding.create_embeddings(df_tokenization)
-        log.info("Embedding done.")
+        logger.info("Embedding done.")
     else:
-        log.info("Embedding skipped.")
+        logger.info("Embedding skipped.")
 
     classification_prompt = get_user_input("Would you like the classification to be (re-)run? (yes/no): ", yes_choices
                                            + no_choices)
 
     if classification_prompt in yes_choices:
-        log.info("Initiating classification...")
+        logger.info("Initiating classification...")
         df_embeddings_array = classification.embeddings_to_array()
-        classification.classify_embedding(df_embeddings_array, 10)
+        classification.classify_embedding(df_embeddings_array, config.n_splits)
         # classification.classify_acoustic()
-        log.info("Classification done.")
+        logger.info("Classification done.")
     else:
-        log.info("Classification skipped.")
+        logger.info("Classification skipped.")
 
 
 if __name__ == "__main__":

@@ -2,14 +2,9 @@ import os
 import codecs
 from matplotlib import pyplot as plt
 import config
+from config import logger
 import pandas as pd
 import openai
-import logging
-
-# Configure logging to display messages in the terminal
-logging.basicConfig(level=logging.INFO)
-# Create a logger instance for this file
-log = logging.getLogger("Embedding")
 
 
 # Saving the raw text into a CSV file
@@ -51,7 +46,7 @@ def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
                        on='adressfname',
                        how='inner')
     output1.to_csv(config.scraped_path)
-    log.info(f"Writing {config.scraped_path}...")
+    logger.info(f"Writing {config.scraped_path}...")
     output1.head()
 
 
@@ -139,5 +134,5 @@ def create_embeddings(df):
         lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
 
     df.to_csv(config.embeddings_path)
-    log.info(f"Writing {config.embeddings_path}...")
+    logger.info(f"Writing {config.embeddings_path}...")
     df.head()
