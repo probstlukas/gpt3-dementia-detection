@@ -129,7 +129,7 @@ def classify_embedding(dataset, _n_splits):
     X = list(dataset['embeddings'].values)
 
     baseline_score = dummy_stratified_clf(X, y)
-    logger.info(f"Baseline performance of the dummy classifier: {baseline_score}")
+    logger.debug(f"Baseline performance of the dummy classifier: {baseline_score}")
 
     # Create models
     models = [SVC(), LogisticRegression(), RandomForestClassifier()]
@@ -199,8 +199,8 @@ def classify_embedding(dataset, _n_splits):
 
         visualize_results(_n_splits, name, results, (config.embedding_results_dir / "plots").resolve())
 
-        models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': model,
-                                                       'Size': results['model_size'],
+        models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': name,
+                                                       'Size': f"{results['model_size']} B",
                                                        }])], ignore_index=True)
         total_models_size += results['model_size']
 
