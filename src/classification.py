@@ -122,6 +122,7 @@ def cross_validation(name, model, _X, _y, _cv):
 
 # AD classification using linguistic features (embeddings) from transcribed speech
 def classify_embedding(dataset, _n_splits):
+    logger.info("Initiating classification with GPT-3 text embeddings...")
     dataset = data_preprocessing(dataset)
 
     # Define the dependent variable that needs to be predicted (labels)
@@ -229,6 +230,8 @@ def classify_embedding(dataset, _n_splits):
     models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
     models_size_df.to_csv(models_size_file)
     logger.info(f"Writing {models_size_file}...")
+
+    logger.info("Classification with GPT-3 text embeddings done.")
 
 
 def visualize_results(_n_splits, name, results, save_dir):
