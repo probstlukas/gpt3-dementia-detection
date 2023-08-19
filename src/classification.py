@@ -1,22 +1,23 @@
-import config
-from config import logger
-import pandas as pd
+import pickle
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
+import pandas as pd
+from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import (
-    KFold, train_test_split, GridSearchCV, cross_validate
-)
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score, make_scorer, recall_score, precision_score, f1_score
 )
-import matplotlib.pyplot as plt
+from sklearn.model_selection import (
+    KFold, train_test_split, GridSearchCV, cross_validate
+)
+from sklearn.svm import SVC
 from sklearn.utils import resample
-from sklearn.dummy import DummyClassifier
-import pickle
-from pathlib import Path
-import sys
+
+import config
+from config import logger
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -204,7 +205,7 @@ def classify_embedding(dataset, _n_splits):
                                                        }])], ignore_index=True)
         total_models_size += results['model_size']
 
-    logger.info(f"Total size of all models: {total_models_size}.")
+    logger.debug(f"Total size of all models: {total_models_size}.")
     logger.info("Training using GPT embeddings done.")
 
     # Adjust resulting dataframe
@@ -222,7 +223,7 @@ def classify_embedding(dataset, _n_splits):
 
     # Add total size to models_size
     models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': 'Total',
-                                                           'Size': total_models_size,
+                                                               'Size': f'{total_models_size} B',
                                                            }])], ignore_index=True)
     # Save results to csv
     models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
