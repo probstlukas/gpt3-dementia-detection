@@ -6,11 +6,10 @@ import embedding
 import classification
 from utils.input_utils import get_user_input
 
-
 def main():
     openai.api_key = config.secret_key()
 
-    whisper_model, tokenizer = config.set_up()
+    tokenizer = config.set_up()
 
     ### User input
     yes_choices = ["yes", "y"]
@@ -21,9 +20,10 @@ def main():
                                           + no_choices)
 
     if transcription_prompt in yes_choices:
-        logger.info("Initiating transcription...")
-        transcribe.transcribe(whisper_model)
-        logger.info("Transcription done.")
+        whisper_model_choices = ["tiny", "base", "small", "medium", "large"]
+        whisper_model_prompt = get_user_input("Which WhisperAI model should be used for transcription? "
+                                              "(tiny/base/small/medium/large): ", whisper_model_choices)
+        transcribe.transcribe(whisper_model_prompt)
     else:
         logger.info("Transcription skipped.")
 
