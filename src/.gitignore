@@ -1,6 +1,10 @@
 # Dataset
 ADReSSo/
 
+# Processed files and results
+processed/
+results/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
