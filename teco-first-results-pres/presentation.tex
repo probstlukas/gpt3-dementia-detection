@@ -3,11 +3,12 @@
 %%
 %% Siehe https://sdqweb.ipd.kit.edu/wiki/Dokumentvorlagen
 
-%% Beispiel-Präsentation
+%% Präsentation
 \documentclass{sdqbeamer} 
+% \documentclass[notes=show]{sdqbeamer}  % Mit Notizen
  
 %% Titelbild
-\titleimage{banner_2020_kit}
+\titleimage{banner\_2020\_kit}
 
 %% Gruppenlogo
 \grouplogo{teco} 
@@ -22,13 +23,40 @@
 \subtitle{Erste Ergebnisse} 
 \author[Lukas Probst]{Lukas Probst}
 
-\date[31.\,8.\,2023]{31. August 2023}
+\date[20.8.2023]{20. August 2023}
+
+% Import von Paketen
+\usepackage{circuitikz} % Create graphics
+\usepackage{listings} % Allows code listings
+\usepackage{csvsimple} % Generate table from csv file
 
 % Literatur 
  
-\usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=biber]{biblatex}
+\usepackage[citestyle=authoryear,bibstyle=numeric,hyperref,backend=bibtex]{biblatex}
 \addbibresource{presentation.bib}
 \bibhang1em
+
+% Define a custom color
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+
+% Define a custom style
+\lstdefinestyle{myStyle}{
+	backgroundcolor=\color{backcolour},   
+	commentstyle=\color{codegreen},
+	basicstyle=\ttfamily\footnotesize,
+	breakatwhitespace=false,         
+	breaklines=true,                 
+	keepspaces=true,                  
+	showspaces=false,                
+	showstringspaces=false,
+	showtabs=false,                  
+	tabsize=2,
+}
+
+% Use \lstset to make myStyle the global default
+\lstset{style=myStyle}
+\lstset{language=Python}
 
 \begin{document}
  
@@ -42,26 +70,152 @@
 
 \section{Vorgehensweise}
 
-\subsection{Aufbau}
-\begin{frame}{Aufbau}
-	TODO: Kurze Pipeline-Grafik mit allen verwendeten Bibliotheken und 
-	Schnittstellen
+\subsection{Wegweisendes Paper}
+\begin{frame}{Wegweisendes Paper von \cite{10.1371/journal.pdig.0000168}}
+	\begin{itemize}
+		\item \citetitle{10.1371/journal.pdig.0000168} (Drexel Universität) liefert beeindruckende Ergebnisse für die Vorhersage von Demenz mit GPT-3 Text Embeddings sowie akustischen Merkmalen der Tonaufnahmen.
+		\begin{itemize}
+			\item Text Embeddings können zuverlässig verwendet werden, um Personen mit Demenz von gesunden Kontrollpersonen zu unterscheiden und den kognitiven Testwert der Testperson (MMSE Score) abzuleiten, beides ausschließlich auf der Grundlage von Sprachdaten. 
+			\item Die Ergebnisse zeigen, dass die Verwendung von GPT-3 Text Embeddings ein praktikabler Ansatz für die Bewertung von Demenz ist und das Potenzial hat, die Frühdiagnose von Demenz zu verbessern.
+		\end{itemize}
+	\end{itemize}
 \end{frame}
 
-\subsection{Modelle}
-\begin{frame}{Verwendete ML-Modelle}
-	TODO: Code-Schnipsel der verwendeten Modelle, GridSearcCV
+\subsection{Aufbau}
+\begin{frame}{Aufbau}
+	\begin{figure}[!ht]
+		\centering
+		\resizebox{1\textwidth}{!}{%
+			\begin{circuitikz}
+				\tikzstyle{every node}=[font=\LARGE]
+				\node  [waves, right] at(-3.75,10.75) {};
+				\draw [](1.25,10) to[short] (1.25,11.25);
+				\draw [ -Stealth] (-1.75,10.75) -- (0.75,10.75);
+				\draw [ -Stealth] (4.5,10.75) -- (7,10.75);
+				\draw [ -Stealth] (12,10.75) -- (14.5,10.75);
+				\node [font=\normalsize] at (2.5,10.8) {Transkription};
+				\node [font=\normalsize] at (2.5,10.3) {mit Whisper};
+				\draw [](1.25,11.25) to[short] (3.75,11.25);
+				\draw [](3.75,11.25) to[short] (3.75,10);
+				\draw [](1.25,10) to[short] (3.75,10);
+				\draw [](7.5,11.25) to[short] (7.5,10);
+				\draw [](7.5,11.25) to[short] (11.25,11.25);
+				\draw [](7.5,10) to[short] (11.25,10);
+				\draw [](11.25,10) to[short] (11.25,11.25);
+				\node [font=\normalsize] at (9.35,10.6) {GPT-3 Text Embedding};
+				\node [font=\normalsize] at (17.5,10.8) {Trainieren von Modellen};
+				\node [font=\normalsize] at (17.5,10.3) {mit linguistischen Merkmalen};
+				\draw [](15,11.25) to[short] (15,10);
+				\draw [](15,11.25) to[short] (20,11.25);
+				\draw [](15,10) to[short] (20,10);
+				\draw [](20,10) to[short] (20,11.25);
+			\end{circuitikz}
+		}%
+	
+	\end{figure}
+\end{frame}
+
+\subsection{Trainieren von Modellen}
+\begin{frame}[fragile]{10-Fold Cross Validation}
+	\begin{lstlisting}
+		_n_splits = 10
+		# Split the dataset into k equal partitions
+		cv = KFold(n_splits=_n_splits, random_state=42, shuffle=True)
+	\end{lstlisting}
+\end{frame}
+\begin{frame}[fragile, shrink=20]{Hyperparameteroptimierung mit GridSearchCV: Parameter Grids}
+	\begin{lstlisting}
+		svc_param_grid = {
+			'C': [0.1, 1, 10, 100],
+			'gamma': [1, 0.1, 0.01, 0.001],
+			'kernel': ['rbf', 'poly', 'sigmoid']
+		}
+		lr_param_grid = [
+		{'penalty': ['l1', 'l2'],
+			'C': np.logspace(-4, 4, 20),
+			'solver': ['liblinear'],
+			'max_iter': [100, 200, 500, 1000]},
+		{'penalty': ['l2'],
+			'C': np.logspace(-4, 4, 20),
+			'solver': ['lbfgs'],
+			'max_iter': [200, 500, 1000]},
+		]
+		rf_param_grid = {
+			'n_estimators': [25, 50, 100, 150],
+			'max_features': ['sqrt', 'log2', None],
+			'max_depth': [3, 6, 9],
+			'max_leaf_nodes': [3, 6, 9],
+		}
+	\end{lstlisting}
+\end{frame}
+\begin{frame}[fragile,shrink=20]{Hyperparameteroptimierung mit GridSearchCV: Ermitteln der besten Parameter}
+	\begin{lstlisting}
+		 for model, name in zip(models, names):
+			# Tune hyperparameters with GridSearchCV
+			best_params = None
+			if name == 'SVC':
+				grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+				grid_search.fit(X, y)
+				best_params = grid_search.best_params_
+			elif name == 'LR':
+				grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+				grid_search.fit(X, y)
+				best_params = grid_search.best_params_
+			elif name == 'RF':
+				grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+				grid_search.fit(X, y)
+				best_params = grid_search.best_params_
+				model.set_params(**best_params)
+			
+			# Perform cross-validation with custom scoring metrics and best params
+			results = cross_validation(name, model, X, y, cv)
+	\end{lstlisting}
 \end{frame}
 
 
 \section{Ergebnisse}
-\begin{frame}{TODO}
-	TODO: Ergebnis-Tabelle einfügen.
+\begin{frame}{Auswertung der trainierten Modelle}
+	\csvautotabular{scripts/csv/embedding_results.csv}
+\end{frame}
+
+\subsection{Vergleich mit den Ergebnissen von \cite{10.1371/journal.pdig.0000168} der Drexel Universität}
+\begin{frame}{Vergleich mit den Ergebnissen der Drexel Universität (\cite{10.1371/journal.pdig.0000168})}
+	\begin{figure}[h]
+		\centering
+		\includegraphics[scale=0.75]{figures/journal.pdig.0000168.t002.PNG}
+	\end{figure}
+	\note{Mit Werten für Ada-Modell vergleichen}
+\end{frame}
+\begin{frame}{Vergleich mit den Ergebnissen der Drexel Universität (\cite{10.1371/journal.pdig.0000168})}
+	$\Rightarrow$ Vergleichbare Werte, möglicherweise sogar etwas besser nach Optimierung.\\[2ex]
+	Vergleich mit Vorsicht zu genießen, denn...
+	\begin{itemize}
+		\item Es wurde eine andere Bibliothek für die Transkription verwendet und bisher nur das base-Modell davon verwendet.
+		\begin{itemize}
+			\item Ergebnisse könnten durch größeres Whisper Modell verbessert werden.
+		\end{itemize}
+		\item Es könnten andere Parameter für die Modelle verwendet worden sein, die die Ergebnisse beeinflussen.
+	\end{itemize}
 \end{frame}
 	
 \section{Ausblick}
+\subsection{Mögliche Erweiterungen}
 \begin{frame}{Mögliche Erweiterungen}
-	TODO: Woran noch weitergearbeitet werden könnte: acoustic features, OpenSMILE, ...
+	\begin{itemize}
+		\item Modelle mit akustischen Merkmalen (OpenSMILE) trainieren (WIP)
+		\begin{itemize}
+			\item "With additional acoustic features, we observe only marginal improvement in the classification performance on the 10-fold CV. There is no clear difference in predicting the test set in terms of accuracy and F1 score when the acoustic features are combined with GPT-3 based text embeddings, but we instead observe higher precision at the expense of lower recall."\ \textendash \ \cite{10.1371/journal.pdig.0000168}.
+		\end{itemize}
+		\item Kombination aus Text Embedding \& akustischen Merkmalen.
+		\item Fine-Tuning eines GPT-3 Text Embedding Modells
+		\begin{itemize}
+			\item "[...] the fine-tuned Babbage model underperforms the GPT-3 based text embeddings, a result in line with the recent findings that GPT-3 embedding model is even competitive with fine-tuned models."\ \textendash \ \cite{10.1371/journal.pdig.0000168}.
+		\end{itemize}
+		\item MMSE Prediction Task der ADReSSo-Challenge
+		\begin{itemize}
+			\item Ausprägungsgrad der Demenz-Erkrankung ermitteln.
+		\end{itemize}
+	\end{itemize}
 \end{frame}
 
 \end{document}
