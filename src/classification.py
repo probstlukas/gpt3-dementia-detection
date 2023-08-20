@@ -15,9 +15,11 @@ from sklearn.model_selection import (
 )
 from sklearn.svm import SVC
 from sklearn.utils import resample
+import opensmile
 
 import config
 from config import logger
+from utils.fetch_audio import fetch_audio_files
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -144,6 +146,12 @@ def classify_embedding(dataset, _n_splits):
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
     models_size_df = pd.DataFrame(columns=['Model', 'Size'])
 
+    # Add baseline score to dataframe
+    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
+                                                       'Model': 'Dummy',
+                                                       'Accuracy': baseline_score,
+                                                       }])], ignore_index=True)
+
     # Create the parameter grid
     svc_param_grid = {
         'C': [0.1, 1, 10, 100],
@@ -202,8 +210,8 @@ def classify_embedding(dataset, _n_splits):
         visualize_results(_n_splits, name, results, (config.embedding_results_dir / "plots").resolve())
 
         models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': name,
-                                                       'Size': f"{results['model_size']} B",
-                                                       }])], ignore_index=True)
+                                                                   'Size': f"{results['model_size']} B",
+                                                                   }])], ignore_index=True)
         total_models_size += results['model_size']
 
     logger.debug(f"Total size of all models: {total_models_size}.")
@@ -212,11 +220,7 @@ def classify_embedding(dataset, _n_splits):
     # Adjust resulting dataframe
     results_df = results_df.sort_values(by='Set', ascending=False)
     results_df = results_df.reset_index(drop=True)
-    # Add baseline score to dataframe
-    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
-                                                       'Model': 'Dummy',
-                                                       'Accuracy': baseline_score,
-                                                       }])], ignore_index=True)
+
     # Save results to csv
     embedding_results_file = (config.embedding_results_dir / 'embedding_results.csv').resolve()
     results_df.to_csv(embedding_results_file)
@@ -225,7 +229,7 @@ def classify_embedding(dataset, _n_splits):
     # Add total size to models_size
     models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': 'Total',
                                                                'Size': f'{total_models_size} B',
-                                                           }])], ignore_index=True)
+                                                               }])], ignore_index=True)
     # Save results to csv
     models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
     models_size_df.to_csv(models_size_file)
@@ -235,8 +239,8 @@ def classify_embedding(dataset, _n_splits):
 
 
 def visualize_results(_n_splits, name, results, save_dir):
-    plot_accuracy_path = (save_dir  / f'plot_accuracy_{name}.png').resolve()
-    plot_precision_path = (save_dir  / f'plot_precision_{name}.png').resolve()
+    plot_accuracy_path = (save_dir / f'plot_accuracy_{name}.png').resolve()
+    plot_precision_path = (save_dir / f'plot_precision_{name}.png').resolve()
     plot_recall_path = (save_dir / f'plot_recall_{name}.png').resolve()
     plot_f1_path = (save_dir / f'plot_precision_{name}.png').resolve()
     # Plot Accuracy Result
@@ -384,10 +388,9 @@ def dummy_stratified_clf(X, y):
     return stratified_clf.score(X_test, y_test)
 
 
-
 # AD classification using acoustic features from OpenSMILE
 # TODO: Run and see if there are any errors, if not evaluate results
-def classify_acoustic():
+def classify_acoustic(dataset, _n_splits):
     dataset = data_preprocessing(dataset)
 
     file_label_dict = dict(zip(dataset['adressfname'], dataset['dx']))
@@ -435,7 +438,7 @@ def classify_acoustic():
                                 zip(feature_vectors_lowlevel, feature_vectors_functionals)]
 
     # Define the dependent variable that needs to be predicted (labels)
-    y = df['dx'].values
+    y = dataset['dx'].values
     # Define the independent variable
     X = feature_vectors_combined
 
@@ -491,7 +494,7 @@ def classify_acoustic():
         model.set_params(**best_params)
 
         # Perform cross-validation with custom scoring metrics and best params
-        results = cross_validation(model, X, y, cv)
+        results = cross_validation(name, model, X, y, cv)
         results_df = results_to_df(name, results, results_df)
 
         visualize_results(_n_splits, name, results, config.acoustic_results_dir)

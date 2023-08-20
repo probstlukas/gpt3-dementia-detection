@@ -23,7 +23,7 @@ def main():
 
     if transcription_prompt in yes_choices:
         whisper_model_choices = ["tiny", "base", "small", "medium", "large"]
-        whisper_model_prompt = get_user_input("Which WhisperAI model should be used for transcription? "
+        whisper_model_prompt = get_user_input("Which Whisper model should be used for transcription? "
                                               "(tiny/base/small/medium/large): ", whisper_model_choices)
         transcribe.transcribe(whisper_model_prompt)
     else:
