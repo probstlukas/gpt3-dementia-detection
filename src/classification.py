@@ -386,6 +386,7 @@ def dummy_stratified_clf(X, y):
 
 
 # AD classification using acoustic features from OpenSMILE
+# TODO: Run and see if there are any errors, if not evaluate results
 def classify_acoustic():
     dataset = data_preprocessing(dataset)
 
@@ -476,7 +477,7 @@ def classify_acoustic():
     logger.info("Beginning to train models using acoustic embeddings...")
 
     for model, name in zip(models, names):
-        # TODO: scaling?
+        # TODO: Ask Tobi: Standard-/MinMaxScaler needed to normalize data?
 
         # Tune hyperparameters with GridSearchCV
         if name == 'SVC':
