@@ -385,7 +385,9 @@ def dummy_stratified_clf(X, y):
     X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
     stratified_clf = DummyClassifier(strategy='stratified').fit(X_train, y_train)
 
-    return stratified_clf.score(X_test, y_test)
+    score = round(stratified_clf.score(X_test, y_test), 3)
+
+    return score
 
 
 # AD classification using acoustic features from OpenSMILE
