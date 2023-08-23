@@ -1,5 +1,4 @@
 import pickle
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,11 +14,9 @@ from sklearn.model_selection import (
 )
 from sklearn.svm import SVC
 from sklearn.utils import resample
-import opensmile
 
 import config
 from config import logger
-from utils.fetch_audio import fetch_audio_files
 
 """
 Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
@@ -29,9 +26,9 @@ The text-davinci-003 model will then evaluate it.
 
 # Turning the embeddings into a NumPy array, which will provide more flexibility in how to use it.
 # It will also flatten the dimension to 1-D, which is the required format for many subsequent operations.
-def embeddings_to_array():
-    df = pd.read_csv(config.embeddings_path, index_col=0)
-    df['embeddings'] = df['embeddings'].apply(eval).apply(np.array)
+def embeddings_to_array(embeddings_file):
+    df = pd.read_csv(embeddings_file, index_col=0)
+    df['embedding'] = df['embedding'].apply(eval).apply(np.array)
     df.head()
     return df
 
@@ -63,12 +60,17 @@ def cross_validation(name, model, _X, _y, _cv):
         # by the positive predictions?
         'f1_score': make_scorer(f1_score, average='macro')  # How balanced is the tradeoff between precision and recall?
     }
+    # fit model X,y
+    # predict test data
+    #model.fit(_X, _y)
     scores = cross_validate(estimator=model,
                             X=_X,
                             y=_y,
                             cv=_cv,
                             scoring=_scoring,
                             return_train_score=True)
+
+#    model.predict(X_validation)
 
     # Get size of the serialized model in bytes
     model_size = len(pickle.dumps(model, -1))
@@ -122,15 +124,17 @@ def cross_validation(name, model, _X, _y, _cv):
             }
 
 
+# Split your data into three parts: training, validation and test.
 # AD classification using linguistic features (embeddings) from transcribed speech
-def classify_embedding(dataset, _n_splits):
+def classify_embedding(train_data, test_data, _n_splits):
     logger.info("Initiating classification with GPT-3 text embeddings...")
-    dataset = data_preprocessing(dataset)
+
+    train_data = data_preprocessing(train_data)
 
     # Define the dependent variable that needs to be predicted (labels)
-    y = dataset['dx'].values
-    # Define the independent variable
-    X = list(dataset['embeddings'].values)
+    y = train_data['diagnosis'].values
+    # Define the independent variable; train data
+    X = train_data['embedding'].to_list()
 
     baseline_score = dummy_stratified_clf(X, y)
     logger.debug(f"Baseline performance of the dummy classifier: {baseline_score}")
@@ -139,43 +143,15 @@ def classify_embedding(dataset, _n_splits):
     models = [SVC(), LogisticRegression(), RandomForestClassifier()]
     names = ['SVC', 'LR', 'RF']
 
-    # Split the dataset into k equal partitions
+    # Split the dataset into k equal partitions (each partition is divided in train and validation data)
     cv = KFold(n_splits=_n_splits, random_state=42, shuffle=True)
 
     # Prepare dataframe for results
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
     models_size_df = pd.DataFrame(columns=['Model', 'Size'])
 
-    # Add baseline score to dataframe
-    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
-                                                       'Model': 'Dummy',
-                                                       'Accuracy': baseline_score,
-                                                       }])], ignore_index=True)
-
     # Create the parameter grid
-    svc_param_grid = {
-        'C': [0.1, 1, 10, 100],
-        'gamma': [1, 0.1, 0.01, 0.001],
-        'kernel': ['rbf', 'poly', 'sigmoid']
-    }
-
-    lr_param_grid = [
-        {'penalty': ['l1', 'l2'],
-         'C': np.logspace(-4, 4, 20),
-         'solver': ['liblinear'],
-         'max_iter': [100, 200, 500, 1000]},
-        {'penalty': ['l2'],
-         'C': np.logspace(-4, 4, 20),
-         'solver': ['lbfgs'],
-         'max_iter': [200, 500, 1000]},
-    ]
-
-    rf_param_grid = {
-        'n_estimators': [25, 50, 100, 150],
-        'max_features': ['sqrt', 'log2', None],
-        'max_depth': [3, 6, 9],
-        'max_leaf_nodes': [3, 6, 9],
-    }
+    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
 
     logger.info("Beginning to train models using GPT embeddings...")
 
@@ -221,6 +197,12 @@ def classify_embedding(dataset, _n_splits):
     results_df = results_df.sort_values(by='Set', ascending=False)
     results_df = results_df.reset_index(drop=True)
 
+    # Add baseline score to dataframe
+    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
+                                                       'Model': 'Dummy',
+                                                       'Accuracy': baseline_score,
+                                                       }])], ignore_index=True)
+
     # Save results to csv
     embedding_results_file = (config.embedding_results_dir / 'embedding_results.csv').resolve()
     results_df.to_csv(embedding_results_file)
@@ -236,6 +218,31 @@ def classify_embedding(dataset, _n_splits):
     logger.info(f"Writing {models_size_file}...")
 
     logger.info("Classification with GPT-3 text embeddings done.")
+
+
+def param_grids():
+    svc_param_grid = {
+        'C': [0.1, 1, 10, 100],
+        'gamma': [1, 0.1, 0.01, 0.001],
+        'kernel': ['rbf', 'poly', 'sigmoid']
+    }
+    lr_param_grid = [
+        {'penalty': ['l1', 'l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['liblinear'],
+         'max_iter': [100, 200, 500, 1000]},
+        {'penalty': ['l2'],
+         'C': np.logspace(-4, 4, 20),
+         'solver': ['lbfgs'],
+         'max_iter': [200, 500, 1000]},
+    ]
+    rf_param_grid = {
+        'n_estimators': [25, 50, 100, 150],
+        'max_features': ['sqrt', 'log2', None],
+        'max_depth': [3, 6, 9],
+        'max_leaf_nodes': [3, 6, 9],
+    }
+    return lr_param_grid, rf_param_grid, svc_param_grid
 
 
 def visualize_results(_n_splits, name, results, save_dir):
@@ -342,13 +349,11 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data, savefig_path
         fig.savefig(savefig_path, dpi=fig.dpi)
 
 
+#
 def data_preprocessing(df):
     """ Preprocessing of the data """
-    # Drop rows with NaN values in "embedding" or "dx" columns
-    # TODO: There shouldn't be any empty entries in the first place
-    df.dropna(subset=['embeddings', 'dx'], inplace=True)
     # Transform into binary classification
-    df['dx'] = [1 if b == 'ad' else 0 for b in df.dx]
+    df['diagnosis'] = [1 if b == 'ad' else 0 for b in df['diagnosis']]
     # How many data points for each class?
     # print(df.dx.value_counts())
     # Understand the data
@@ -356,8 +361,8 @@ def data_preprocessing(df):
 
     ### Balance data by down-sampling majority class
     # Separate majority and minority classes
-    df_majority = df[df.dx == 1]  # 87 ad datapoints
-    df_minority = df[df.dx == 0]  # 79 cn datapoints
+    df_majority = df[df['diagnosis'] == 1]  # 87 ad datapoints
+    df_minority = df[df['diagnosis'] == 0]  # 79 cn datapoints
     # print(len(df_minority))
     # Undersample majority class
     df_majority_downsampled = resample(df_majority,
@@ -391,58 +396,13 @@ def dummy_stratified_clf(X, y):
 
 
 # AD classification using acoustic features from OpenSMILE
-# TODO: Run and see if there are any errors, if not evaluate results
-def classify_acoustic(dataset, _n_splits):
-    dataset = data_preprocessing(dataset)
-
-    file_label_dict = dict(zip(dataset['adressfname'], dataset['dx']))
-
-    # Create an instance of the openSMILE feature extractor
-    smile_lowlevel = opensmile.Smile(
-        feature_set=opensmile.FeatureSet.eGeMAPSv02,
-        feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
-    )
-
-    smile_functionals = opensmile.Smile(
-        feature_set=opensmile.FeatureSet.eGeMAPSv02,
-        feature_level=opensmile.FeatureLevel.Functionals,
-    )
-
-    # Fetch the audio files
-    audio_files = fetch_audio_files(config.diagnosis_train_data)
-
-    # Create lists to hold the filenames, labels, and feature vectors
-    filenames = []
-    labels = []
-    feature_vectors_lowlevel = []
-    feature_vectors_functionals = []
-
-    # Iterate through audio files and extract features
-    for audio_file in audio_files:
-        filename = Path(audio_file).stem
-        label = file_label_dict.get(filename)
-
-        # Check if the label is not None (i.e., the filename was found in the DataFrame)
-        if label is not None:
-            filenames.append(filename)
-            labels.append(label)
-
-            # Extract Low-Level Descriptors using openSMILE
-            feature_vector_lowlevel = smile_lowlevel.process_file(audio_file)
-            feature_vectors_lowlevel.append(feature_vector_lowlevel)
-
-            # Extract Functionals features using openSMILE
-            feature_vector_functionals = smile_functionals.process_file(audio_file)
-            feature_vectors_functionals.append(feature_vector_functionals)
-
-    # Combine Low-Level Descriptors and Functionals features
-    feature_vectors_combined = [lowlevel + functionals for lowlevel, functionals in
-                                zip(feature_vectors_lowlevel, feature_vectors_functionals)]
+def classify_acoustic(acoustic_features_csv, transcription_csv, _n_splits):
+    dataset = data_preprocessing(transcription_csv)
 
     # Define the dependent variable that needs to be predicted (labels)
-    y = dataset['dx'].values
+    y = dataset['diagnosis'].values
     # Define the independent variable
-    X = feature_vectors_combined
+    X = acoustic_features_csv
 
     # Create models
     models = [SVC(), LogisticRegression(), RandomForestClassifier()]
@@ -485,18 +445,25 @@ def classify_acoustic(dataset, _n_splits):
         # TODO: Ask Tobi: Standard-/MinMaxScaler needed to normalize data?
 
         # Tune hyperparameters with GridSearchCV
+        best_params = None
         if name == 'SVC':
-            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score='raise')
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
         elif name == 'LR':
             grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
         elif name == 'RF':
             grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-        grid_search.fit(X, y)
-        best_params = grid_search.best_params_
+            grid_search.fit(X, y)
+            best_params = grid_search.best_params_
+        logger.debug(f"Best params for model {name}: {best_params}")
         model.set_params(**best_params)
 
         # Perform cross-validation with custom scoring metrics and best params
         results = cross_validation(name, model, X, y, cv)
+        logger.debug(results)
         results_df = results_to_df(name, results, results_df)
 
         visualize_results(_n_splits, name, results, config.acoustic_results_dir)
@@ -508,7 +475,8 @@ def classify_acoustic(dataset, _n_splits):
     results_df = results_df.reset_index(drop=True)
 
     # Save results to csv
-    acoustic_results_file = (config.acoustic_results_dir / 'acoustic_results.csv').resolve()
-    results_df.to_csv(acoustic_results_file)
+    results_df.to_csv(config.acoustic_results_file)
 
-    logger.info(f"Writing {acoustic_results_file}...")
+    logger.info(f"Writing {config.acoustic_results_file}...")
+
+

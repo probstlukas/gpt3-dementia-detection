@@ -1,5 +1,4 @@
-import os
-import codecs
+
 from matplotlib import pyplot as plt
 import config
 from config import logger
@@ -7,95 +6,73 @@ import pandas as pd
 import openai
 
 
-# Saving the raw text into a CSV file
-def text_to_csv(data_dir):
-    texts = []
-    for root, dirs, files in os.walk(data_dir):
-        if os.path.basename(root) != 'transcription':
-            continue
-        for file in files:
-            with codecs.open(os.path.join(root, file), 'r', encoding='utf-8', errors='ignore') as f:
-                text = f.read()
-                texts.append((file, text))
-
-    # Blank empty lines can clutter the text files and make them harder to process.
-    # This function removes those lines and tidies up the files.
-    def remove_newlines(serie):
-        serie = serie.str.replace('\n', ' ')
-        serie = serie.str.replace('\\n', ' ')
-        serie = serie.str.replace('  ', ' ')
-        serie = serie.str.replace('  ', ' ')
-        return serie
-
-    # Create a dataframe from the list of texts
-    df = pd.DataFrame(texts, columns=['adressfname', 'text'])
-
-    # Set the text column to be the raw text with the newlines removed
-    df['text'] = df.adressfname + ". " + remove_newlines(df.text)
-    return df
-
-
-def merge_embeddings_with_scores(df, diagnosis_train_scores_file):
+def add_train_scores(df):
     # reading two csv files
-    data1 = df
-    data2 = pd.read_csv(diagnosis_train_scores_file)
+    text_data = df
+    logger.debug(text_data)
+    scores_df = pd.read_csv(config.diagnosis_train_scores)
+    # Rename columns for consistency
+    scores_df = scores_df.rename(columns={'adressfname': 'addressfname', 'dx': 'diagnosis'})
+    logger.debug(scores_df)
 
     # using merge function by setting how='inner'
-    output1 = pd.merge(data1,
-                       data2[['adressfname', 'mmse', 'dx']],  # We don't want the key column here
-                       on='adressfname',
-                       how='inner')
-    output1.to_csv(config.scraped_path)
-    logger.info(f"Writing {config.scraped_path}...")
-    output1.head()
+    output = pd.merge(text_data,
+                      scores_df[['addressfname', 'mmse', 'diagnosis']],  # We don't want the key column here
+                      on='addressfname',
+                      how='inner')
+
+    logger.debug(output)
+    return output
 
 
 ### Tokenization
 
-# The API has a limit on the maximum number of input tokens for embeddings.
-# To stay below the limit, the text in the CSV file needs to be broken down into multiple rows.
-# The existing length of each row will be recorded first to identify which rows need to be split.
-def tokenization(tokenizer):
-    df = pd.read_csv(config.scraped_path, index_col=0)
-    df.columns = ['adressfname', 'text', 'mmse', 'dx']
+def tokenization(df, tokenizer):
+    """
+    Tokenize text in a DataFrame and handle chunking for texts exceeding a maximum token limit.
 
+    Parameters:
+        df (pandas.DataFrame): Input DataFrame containing 'addressfname' and 'transcript' columns.
+        tokenizer: The tokenizer object used to tokenize the text.
+
+    Returns:
+        pandas.DataFrame: Processed DataFrame with added 'n_tokens' column and potentially split text chunks.
+    """
     # Tokenize the text and save the number of tokens to a new column
-    df['n_tokens'] = df.text.apply(lambda x: len(tokenizer.encode(x)))
+    df['n_tokens'] = df['transcript'].apply(lambda x: len(tokenizer.encode(x)))
 
     # Visualize the distribution of the number of tokens per row using a histogram
-    df.n_tokens.hist()
-
+    df['n_tokens'].hist()
     plt.show()
 
-    # Function to split the text into chunks of a maximum number of tokens
-    def split_into_many(text, max_tokens=config.max_tokens, title=None):
-        # Split the text into sentences
-        sentences = text.split('. ')
+    def split_into_many(text, max_tokens):
+        """
+        Split a long text into multiple chunks, each with a maximum number of tokens.
 
-        # Get the number of tokens for each sentence
-        n_tokens = [len(tokenizer.encode(" " + sentence)) for sentence in sentences]
+        Parameters:
+            text (str): The input text to be split into chunks.
+            max_tokens (int): The maximum number of tokens allowed in each chunk.
+
+        Returns:
+            list: A list of text chunks, where each chunk has at most max_tokens tokens.
+        """
+        sentences = text.split('. ')
 
         chunks = []
         tokens_so_far = 0
         chunk = []
 
-        # Loop through the sentences and tokens joined together in a tuple
-        for sentence, token in zip(sentences, n_tokens):
+        for sentence in sentences:
+            token = len(tokenizer.encode(" " + sentence))
 
-            # If the number of tokens so far plus the number of tokens in the current sentence is greater
-            # than the max number of tokens, then add the chunk to the list of chunks and reset
-            # the chunk and tokens so far
             if tokens_so_far + token > max_tokens:
-                chunks.append({"adressfname": title, "text": ". ".join(chunk) + "."})
+                chunks.append(". ".join(chunk) + ".")
                 chunk = []
                 tokens_so_far = 0
 
-            # If the number of tokens in the current sentence is greater than the max number of
-            # tokens, go to the next sentence
             if token > max_tokens:
                 continue
 
-            # Otherwise, add the sentence to the chunk and add the number of tokens to the total
             chunk.append(sentence)
             tokens_so_far += token + 1
 
@@ -103,36 +80,35 @@ def tokenization(tokenizer):
 
     shortened = []
 
-    # Loop through the dataframe
     for _, row in df.iterrows():
-
-        # If the text is None, go to the next row
-        if row['text'] is None:
+        if row['transcript'] is None:
             continue
 
-        # If the number of tokens is greater than the max number of tokens, split the text into chunks
         if row['n_tokens'] > config.max_tokens:
-            chunks = split_into_many(row['text'], title=row['adressfname'])
-            shortened += chunks
-
-        # Otherwise, add the text to the list of shortened texts
+            row_chunks = split_into_many(row['transcript'], max_tokens=config.max_tokens)
+            for chunk in row_chunks:
+                shortened.append({'addressfname': row['addressfname'], 'transcript': chunk})
         else:
-            shortened.append({"adressfname": row['adressfname'],
-                              "text": row['text'],
-                              "mmse": row['mmse'],
-                              "dx": row['dx']})
+            shortened.append({'addressfname': row['addressfname'], 'transcript': row['transcript']})
 
     df_shortened = pd.DataFrame(shortened)
-    df_shortened['n_tokens'] = df_shortened.text.apply(lambda x: len(tokenizer.encode(x)))
-    df_shortened.n_tokens.hist()
+    df_shortened['n_tokens'] = df_shortened['transcript'].apply(lambda x: len(tokenizer.encode(x)))
+    df_shortened['n_tokens'].hist()
     plt.show()
+
+    logger.debug(df_shortened)
     return df_shortened
 
 
 def create_embeddings(df):
-    df['embeddings'] = df.text.apply(
+    # TODO: Add engine to config
+    df['embedding'] = df['transcript'].apply(
         lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
+    df = df.drop('transcript', axis=1)
+    return df
 
-    df.to_csv(config.embeddings_path)
-    logger.info(f"Writing {config.embeddings_path}...")
-    df.head()
+
+def embeddings_exists():
+    if config.train_embeddings_path.is_file() and config.test_embeddings_path.is_file():
+        return True
+    return False
