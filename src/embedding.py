@@ -4,6 +4,7 @@ import config
 from config import logger
 import pandas as pd
 import openai
+from sklearn.utils import resample
 
 
 def add_train_scores(df):
@@ -13,6 +14,8 @@ def add_train_scores(df):
     scores_df = pd.read_csv(config.diagnosis_train_scores)
     # Rename columns for consistency
     scores_df = scores_df.rename(columns={'adressfname': 'addressfname', 'dx': 'diagnosis'})
+    scores_df = binarize_labels(scores_df)
+
     logger.debug(scores_df)
 
     # using merge function by setting how='inner'
@@ -23,6 +26,34 @@ def add_train_scores(df):
 
     logger.debug(output)
     return output
+
+
+def binarize_labels(df):
+    # Transform into binary classification
+    df['diagnosis'] = [1 if label == 'ad' else 0 for label in df['diagnosis']]
+    # How many data points for each class?
+    # print(df.dx.value_counts())
+    # Understand the data
+    # sns.countplot(x='dx', data=df)  # 1 - diagnosed   0 - control group
+
+    ### Balance data by down-sampling majority class
+    # Separate majority and minority classes
+    df_majority = df[df['diagnosis'] == 1]  # 87 ad datapoints
+    df_minority = df[df['diagnosis'] == 0]  # 79 cn datapoints
+    # print(len(df_minority))
+    # Undersample majority class
+    df_majority_downsampled = resample(df_majority,
+                                       replace=False,  # sample without replacement
+                                       n_samples=len(df_minority),  # to match minority class
+                                       random_state=42)  # reproducible results
+
+    # Combine undersampled majority class with minority class
+    df_downsampled = pd.concat([df_majority_downsampled, df_minority])
+    # Display new class counts
+    # print(df_downsampled.dx.value_counts())
+    # sns.countplot(x='dx', data=df_downsampled)  # 1 - diagnosed   0 - control group
+    plt.show()
+    return df_downsampled
 
 
 ### Tokenization
