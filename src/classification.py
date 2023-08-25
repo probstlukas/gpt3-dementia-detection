@@ -26,15 +26,18 @@ The text-davinci-003 model will then evaluate it.
 # Turning the embeddings into a NumPy array, which will provide more flexibility in how to use it.
 # It will also flatten the dimension to 1-D, which is the required format for many subsequent operations.
 def embeddings_to_array(embeddings_file):
-    df = pd.read_csv(embeddings_file, index_col=0)
+    df = pd.read_csv(embeddings_file)
     df['embedding'] = df['embedding'].apply(eval).apply(np.array)
-    df.head()
+    logger.debug(df.head())
     return df
 
 
-# K-Fold Cross-Validation
 def cross_validation(name, model, _X, _y, _cv):
     """ Function to perform K-Fold Cross-Validation
+    We do this to see which model proves better at predicting the test set points.
+    But once we have used cross-validation to evaluate the performance,
+    we train that model on all the data. We don't use the actual model
+    instances we trained during cross-validation for our final predictive model.
      Parameters
      ----------
     model: Python Class, default=None
@@ -50,6 +53,7 @@ def cross_validation(name, model, _X, _y, _cv):
      The function returns a dictionary containing the metrics 'accuracy', 'precision',
      'recall', 'f1' for both training set and validation set.
     """
+
     # Define custom scoring metrics
     _scoring = {
         'accuracy': make_scorer(accuracy_score),  # How many predictions out of the whole were correct?
@@ -59,9 +63,7 @@ def cross_validation(name, model, _X, _y, _cv):
         # by the positive predictions?
         'f1_score': make_scorer(f1_score, average='macro')  # How balanced is the tradeoff between precision and recall?
     }
-    # fit model X,y
-    # predict test data
-    #model.fit(_X, _y)
+
     scores = cross_validate(estimator=model,
                             X=_X,
                             y=_y,
@@ -69,71 +71,40 @@ def cross_validation(name, model, _X, _y, _cv):
                             scoring=_scoring,
                             return_train_score=True)
 
-#    model.predict(X_validation)
+    metrics = ['accuracy', 'precision', 'recall', 'f1_score']
 
-    # Get size of the serialized model in bytes
-    model_size = len(pickle.dumps(model, -1))
-    logger.debug(f"Model size of {name}: {model_size} bytes.")
+    result = {}
 
-    train_accuracy = scores['test_accuracy']
-    train_accuracy_mean = round(train_accuracy.mean(), 3)
-    train_accuracy_std = round(train_accuracy.std(), 3)
-    train_precision = scores['test_precision']
-    train_precision_mean = round(train_precision.mean(), 3)
-    train_precision_std = round(train_precision.std(), 3)
-    train_recall = scores['test_recall']
-    train_recall_mean = round(train_recall.mean(), 3)
-    train_recall_std = round(train_recall.std(), 3)
-    train_f1 = scores['test_f1_score']
-    train_f1_mean = round(train_f1.mean(), 3)
-    train_f1_std = round(train_f1.std(), 3)
+    for metric in metrics:
+        train_scores = scores[f'test_{metric}']
+        train_scores_mean = round(train_scores.mean(), 3)
+        train_scores_std = round(train_scores.std(), 3)
 
-    test_accuracy = scores['test_accuracy']
-    test_accuracy_mean = round(test_accuracy.mean(), 3)
-    test_precision = scores['test_precision']
-    test_precision_mean = round(test_precision.mean(), 3)
-    test_recall = scores['test_recall']
-    test_recall_mean = round(test_recall.mean(), 3)
-    test_f1 = scores['test_f1_score']
-    test_f1_mean = round(test_f1.mean(), 3)
+        test_scores = scores[f'test_{metric}']
+        test_scores_mean = round(test_scores.mean(), 3)
 
-    return {'model_size': model_size,
+        result[f'train_{metric}'] = train_scores
+        result[f'train_{metric}_mean'] = train_scores_mean
+        result[f'train_{metric}_std'] = train_scores_std
 
-            'train_accuracy': train_accuracy,
-            'train_accuracy_mean': train_accuracy_mean,
-            'train_accuracy_std': train_accuracy_std,
-            'train_precision': train_precision,
-            'train_precision_mean': train_precision_mean,
-            'train_precision_std': train_precision_std,
-            'train_recall': train_recall,
-            'train_recall_mean': train_recall_mean,
-            'train_recall_std': train_recall_std,
-            'train_f1': train_f1,
-            'train_f1_mean': train_f1_mean,
-            'train_f1_std': train_f1_std,
+        result[f'test_{metric}'] = test_scores
+        result[f'test_{metric}_mean'] = test_scores_mean
 
-            'test_accuracy': test_accuracy,
-            'test_accuracy_mean': test_accuracy_mean,
-            'test_precision': test_precision,
-            'test_precision_mean': test_precision_mean,
-            'test_recall': test_recall,
-            'test_recall_mean': test_recall_mean,
-            'test_f1': test_f1,
-            'test_f1_mean': test_f1_mean,
-            }
+    return result
 
 
-# Split your data into three parts: training, validation and test.
 # AD classification using linguistic features (embeddings) from transcribed speech
 def classify_embedding(train_data, test_data, _n_splits):
     logger.info("Initiating classification with GPT-3 text embeddings...")
 
     # Define the dependent variable that needs to be predicted (labels)
-    y = train_data['diagnosis'].values
-    # Define the independent variable; train data
-    X = train_data['embedding'].to_list()
+    y_train = train_data['diagnosis'].values
+    # Define the independent variable
+    X_train = train_data['embedding'].to_list()
+    # Test data which is only used after training the model with the train data
+    X_test = test_data['embedding'].to_list()
 
-    baseline_score = dummy_stratified_clf(X, y)
+    baseline_score = dummy_stratified_clf(X_train, y_train)
     logger.debug(f"Baseline performance of the dummy classifier: {baseline_score}")
 
     # Create models
@@ -147,47 +118,80 @@ def classify_embedding(train_data, test_data, _n_splits):
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
     models_size_df = pd.DataFrame(columns=['Model', 'Size'])
 
-    # Create the parameter grid
-    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
-
     logger.info("Beginning to train models using GPT embeddings...")
 
+    # Total size of all models combined
     total_models_size = 0
 
     for model, name in zip(models, names):
-        # It's not necessary to scale the GPT embeddings before using them.
-        # They are already normalised and are in the vector space with a certain distribution.
-
         logger.info(f"Initiating {name}...")
 
-        # Tune hyperparameters with GridSearchCV
-        best_params = None
-        if name == 'SVC':
-            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-            grid_search.fit(X, y)
-            best_params = grid_search.best_params_
-        elif name == 'LR':
-            grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-            grid_search.fit(X, y)
-            best_params = grid_search.best_params_
-        elif name == 'RF':
-            grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-            grid_search.fit(X, y)
-            best_params = grid_search.best_params_
+        ### Model checking
+        best_params = hyperparameter_optimization(X_train, y_train, cv, model, name)
         model.set_params(**best_params)
+        scores = cross_validation(name, model, X_train, y_train, cv)
+        results_df = results_to_df(name, scores, results_df)
 
-        # Perform cross-validation with custom scoring metrics and best params
-        results = cross_validation(name, model, X, y, cv)
-        results_df = results_to_df(name, results, results_df)
+        # Visualize folds for different metrics in plots
+        visualize_results(_n_splits, name, scores, (config.embedding_results_dir / "plots").resolve())
 
-        visualize_results(_n_splits, name, results, (config.embedding_results_dir / "plots").resolve())
+        ### Model building
+        # Get size of the serialized model in bytes before training
+        model_size = len(pickle.dumps(model, -1))
+        logger.debug(f"Model size of {name} before training: {model_size} bytes.")
 
+        # Train each model on the entire training set with best hyperparameters
+        model.fit(X_train, y_train)
+
+        # Get size of the serialized model in bytes after training
+        model_size = len(pickle.dumps(model, -1))
+        logger.debug(f"Model size of {name} after training: {model_size} bytes.")
+        total_models_size += model_size
+
+        # Add trained model size to DataFrame
         models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': name,
-                                                                   'Size': f"{results['model_size']} B",
+                                                                   'Size': f"{model_size} B",
                                                                    }])], ignore_index=True)
-        total_models_size += results['model_size']
 
-    logger.debug(f"Total size of all models: {total_models_size}.")
+        # Load the empty task1 results CSV file
+        model_test_results = pd.read_csv(config.empty_test_results_file)
+
+        # Load model predictions into a separate DataFrame
+        model_predictions = model.predict(X_test)
+
+        # Create a dictionary to store the filename-prediction value pairs
+        filename_to_prediction = {}
+
+        # Iterate through the filenames and model predictions arrays simultaneously
+        for filename, prediction in zip(test_data['addressfname'], model_predictions):
+            # Reverse binary classification
+            filename_to_prediction[filename] = 'ProbableAD' if prediction == 1 else 'Control'
+
+        # Fill the 'Prediction' column using the dictionary
+        model_test_results['Prediction'] = model_test_results['ID'].map(filename_to_prediction)
+
+        # Save the updated DataFrame in a new CSV file
+        model_test_results.to_csv((config.embedding_results_dir / "f'task1_{name}.csv'").resolve(), index=False)
+
+        ### Evaluate performance on test data
+
+        # Actual diagnosed data
+        test_results_task1 = pd.read_csv(config.test_results_task1)
+
+        real_diagnoses = test_results_task1['Dx']
+        predicted_diagnoses = model_test_results['Prediction']
+
+        # Calculate the number of matching values
+        matching_values = sum(real_diagnoses == predicted_diagnoses)
+
+        # Calculate the total number of values
+        total_values = len(real_diagnoses)
+
+        # Calculate the percentage of matching values
+        similarity_percentage = (matching_values / total_values) * 100
+
+        print(f"The similarity between the real and predicted diagnoses is {similarity_percentage:.2f}%.")
+
     logger.info("Training using GPT embeddings done.")
 
     # Adjust resulting dataframe
@@ -206,15 +210,42 @@ def classify_embedding(train_data, test_data, _n_splits):
     logger.info(f"Writing {embedding_results_file}...")
 
     # Add total size to models_size
+    logger.debug(f"Total size of all models: {total_models_size}.")
     models_size_df = pd.concat([models_size_df, pd.DataFrame([{'Model': 'Total',
                                                                'Size': f'{total_models_size} B',
                                                                }])], ignore_index=True)
     # Save results to csv
-    models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
-    models_size_df.to_csv(models_size_file)
-    logger.info(f"Writing {models_size_file}...")
+
+    models_size_df.to_csv(config.models_size_file)
+    logger.info(f"Writing {config.models_size_file}...")
 
     logger.info("Classification with GPT-3 text embeddings done.")
+
+
+# Tune hyperparameters with GridSearchCV
+def hyperparameter_optimization(X_train, y_train, cv, model, name):
+    # Get the parameter grids
+    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
+    grid_search = None
+    if name == 'SVC':
+        grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+    elif name == 'LR':
+        grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+    elif name == 'RF':
+        grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
+
+    grid_search.fit(X_train, y_train)
+    best_params = grid_search.best_params_
+    return best_params
+
+
+#                                                            }])], ignore_index=True)
+# Save results to csv
+# models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
+# models_size_df.to_csv(models_size_file)
+# logger.info(f"Writing {models_size_file}...")
+
+# logger.info("Classification with GPT-3 text embeddings done.")
 
 
 def param_grids():
@@ -272,30 +303,30 @@ def visualize_results(_n_splits, name, results, save_dir):
     plot_result(name,
                 "F1",
                 f"F1 Scores in {_n_splits} Folds",
-                results["train_f1"],
-                results["test_f1"],
+                results["train_f1_score"],
+                results["test_f1_score"],
                 plot_f1_path)
 
 
-def results_to_df(name, results, results_df):
+def results_to_df(name, scores, results_df):
     results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Train',
                                                        'Model': name,
-                                                       'Accuracy': f"{results['train_accuracy_mean']}"
-                                                                   f"({results['train_accuracy_std']})",
-                                                       'Precision': f"{results['train_precision_mean']} "
-                                                                    f"({results['train_precision_std']})",
-                                                       'Recall': f"{results['train_recall_mean']} "
-                                                                 f"({results['train_recall_std']})",
-                                                       'F1': f"{results['train_f1_mean']} "
-                                                             f"({results['train_f1_std']})",
+                                                       'Accuracy': f"{scores['train_accuracy_mean']}"
+                                                                   f"({scores['train_accuracy_std']})",
+                                                       'Precision': f"{scores['train_precision_mean']} "
+                                                                    f"({scores['train_precision_std']})",
+                                                       'Recall': f"{scores['train_recall_mean']} "
+                                                                 f"({scores['train_recall_std']})",
+                                                       'F1': f"{scores['train_f1_score_mean']} "
+                                                             f"({scores['train_f1_score_std']})",
                                                        }])], ignore_index=True)
 
     results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
                                                        'Model': name,
-                                                       'Accuracy': results['test_accuracy_mean'],
-                                                       'Precision': results['test_precision_mean'],
-                                                       'Recall': results['test_recall_mean'],
-                                                       'F1': results['test_f1_mean']
+                                                       'Accuracy': scores['test_accuracy_mean'],
+                                                       'Precision': scores['test_precision_mean'],
+                                                       'Recall': scores['test_recall_mean'],
+                                                       'F1': scores['test_f1_score_mean']
                                                        }])], ignore_index=True)
     return results_df
 
@@ -382,29 +413,7 @@ def classify_acoustic(acoustic_features_csv, transcription_csv, _n_splits):
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
 
     # Create the parameter grid
-    svc_param_grid = {
-        'C': [0.1, 1, 10, 100],
-        'gamma': [1, 0.1, 0.01, 0.001],
-        'kernel': ['rbf', 'poly', 'sigmoid']
-    }
-
-    lr_param_grid = [
-        {'penalty': ['l1', 'l2'],
-         'C': np.logspace(-4, 4, 20),
-         'solver': ['liblinear'],
-         'max_iter': [100, 200, 500, 1000]},
-        {'penalty': ['l2'],
-         'C': np.logspace(-4, 4, 20),
-         'solver': ['lbfgs'],
-         'max_iter': [200, 500, 1000]},
-    ]
-
-    rf_param_grid = {
-        'n_estimators': [25, 50, 100, 150],
-        'max_features': ['sqrt', 'log2', None],
-        'max_depth': [3, 6, 9],
-        'max_leaf_nodes': [3, 6, 9],
-    }
+    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
 
     logger.info("Beginning to train models using acoustic embeddings...")
 
@@ -414,7 +423,8 @@ def classify_acoustic(acoustic_features_csv, transcription_csv, _n_splits):
         # Tune hyperparameters with GridSearchCV
         best_params = None
         if name == 'SVC':
-            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score='raise')
+            grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1,
+                                       error_score='raise')
             grid_search.fit(X, y)
             best_params = grid_search.best_params_
         elif name == 'LR':
@@ -445,5 +455,3 @@ def classify_acoustic(acoustic_features_csv, transcription_csv, _n_splits):
     results_df.to_csv(config.acoustic_results_file)
 
     logger.info(f"Writing {config.acoustic_results_file}...")
-
-

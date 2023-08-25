@@ -82,6 +82,7 @@ def main():
 
             train_embeddings_array = classification.embeddings_to_array(config.train_embeddings_path)
             test_embeddings_array = classification.embeddings_to_array(config.test_embeddings_path)
+
             classification.classify_embedding(train_embeddings_array, test_embeddings_array, config.n_splits)
         elif classification_type_prompt == "acoustic":
             transcription_csv = pd.read_csv(config.train_scraped_path)
