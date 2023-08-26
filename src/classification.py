@@ -93,8 +93,39 @@ def cross_validation(name, model, _X, _y, _cv):
     return result
 
 
-# AD classification using linguistic features (embeddings) from transcribed speech
 def classify_embedding(train_data, test_data, _n_splits):
+    """
+    Perform classification using linguistic features (embeddings) from transcribed speech.
+
+    Args:
+        train_data (DataFrame): Training data containing 'diagnosis' labels and 'embedding' features.
+                                Split into train and validation sets.
+        test_data (DataFrame): Test data containing 'embedding' features.
+        _n_splits (int): Number of folds for cross-validation.
+
+    Returns:
+        None
+
+    This function trains and evaluates multiple machine learning models using the provided embeddings.
+    It performs the following steps:
+    - Loads training and test data.
+    - Calculates baseline performance using a dummy stratified classifier.
+    - Initializes machine learning models.
+    - Creates cross-validation K-folds.
+    - Iterates through each model:
+        Model checking:
+        - Performs hyperparameter optimization using cross-validation.
+        - Records model performance on the training data using cross-validation.
+        - Visualizes cross-validation results.
+        Model building:
+        - Trains the model on the entire training set with the best hyperparameters.
+        - Predicts labels on the test data using the trained model.
+        - Stores predictions in a CSV file.
+        - Evaluates performance on the test data by comparing it to real diagnoses.
+        - Records model sizes before and after training.
+    - Saves performance results to a CSV file.
+    - Saves model sizes to a CSV file.
+    """
     logger.info("Initiating classification with GPT-3 text embeddings...")
 
     # Define the dependent variable that needs to be predicted (labels)
@@ -120,7 +151,7 @@ def classify_embedding(train_data, test_data, _n_splits):
 
     logger.info("Beginning to train models using GPT embeddings...")
 
-    # Total size of all models combined
+    # Collect total size of all models
     total_models_size = 0
 
     for model, name in zip(models, names):
@@ -156,7 +187,7 @@ def classify_embedding(train_data, test_data, _n_splits):
         # Load the empty task1 results CSV file
         model_test_results = pd.read_csv(config.empty_test_results_file)
 
-        # Load model predictions into a separate DataFrame
+        # Predict label on test data with trained model
         model_predictions = model.predict(X_test)
 
         # Create a dictionary to store the filename-prediction value pairs
@@ -173,24 +204,8 @@ def classify_embedding(train_data, test_data, _n_splits):
         # Save the updated DataFrame in a new CSV file
         model_test_results.to_csv((config.embedding_results_dir / "f'task1_{name}.csv'").resolve(), index=False)
 
-        ### Evaluate performance on test data
-
-        # Actual diagnosed data
-        test_results_task1 = pd.read_csv(config.test_results_task1)
-
-        real_diagnoses = test_results_task1['Dx']
-        predicted_diagnoses = model_test_results['Prediction']
-
-        # Calculate the number of matching values
-        matching_values = sum(real_diagnoses == predicted_diagnoses)
-
-        # Calculate the total number of values
-        total_values = len(real_diagnoses)
-
-        # Calculate the percentage of matching values
-        similarity_percentage = (matching_values / total_values) * 100
-
-        print(f"The similarity between the real and predicted diagnoses is {similarity_percentage:.2f}%.")
+        # Evaluate performance on test data
+        evaluate_similarity(model_test_results)
 
     logger.info("Training using GPT embeddings done.")
 
@@ -220,6 +235,20 @@ def classify_embedding(train_data, test_data, _n_splits):
     logger.info(f"Writing {config.models_size_file}...")
 
     logger.info("Classification with GPT-3 text embeddings done.")
+
+
+def evaluate_similarity(model_test_results):
+    # Actual diagnosed data
+    test_results_task1 = pd.read_csv(config.test_results_task1)
+    real_diagnoses = test_results_task1['Dx']
+    predicted_diagnoses = model_test_results['Prediction']
+    # Calculate the number of matching values
+    matching_values = sum(real_diagnoses == predicted_diagnoses)
+    # Calculate the total number of values
+    total_values = len(real_diagnoses)
+    # Calculate the percentage of matching values
+    similarity_percentage = (matching_values / total_values) * 100
+    print(f"The similarity between the real and predicted diagnoses is {similarity_percentage:.2f}%.")
 
 
 # Tune hyperparameters with GridSearchCV
