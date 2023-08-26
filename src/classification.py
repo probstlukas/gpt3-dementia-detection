@@ -32,7 +32,7 @@ def embeddings_to_array(embeddings_file):
     return df
 
 
-def cross_validation(name, model, _X, _y, _cv):
+def cross_validation(model, _X, _y, _cv):
     """ Function to perform K-Fold Cross-Validation
     We do this to see which model proves better at predicting the test set points.
     But once we have used cross-validation to evaluate the performance,
@@ -160,7 +160,7 @@ def classify_embedding(train_data, test_data, _n_splits):
         ### Model checking
         best_params = hyperparameter_optimization(X_train, y_train, cv, model, name)
         model.set_params(**best_params)
-        scores = cross_validation(name, model, X_train, y_train, cv)
+        scores = cross_validation(model, X_train, y_train, cv)
         results_df = results_to_df(name, scores, results_df)
 
         # Visualize folds for different metrics in plots
@@ -202,10 +202,12 @@ def classify_embedding(train_data, test_data, _n_splits):
         model_test_results['Prediction'] = model_test_results['ID'].map(filename_to_prediction)
 
         # Save the updated DataFrame in a new CSV file
-        model_test_results.to_csv((config.embedding_results_dir / "f'task1_{name}.csv'").resolve(), index=False)
+        model_test_results_csv = (config.embedding_results_dir / f'task1_{name}.csv').resolve()
+        model_test_results.to_csv(model_test_results_csv, index=False)
+        logger.info(f"Writing {model_test_results_csv}...")
 
         # Evaluate performance on test data
-        evaluate_similarity(model_test_results)
+        evaluate_similarity(name, model_test_results)
 
     logger.info("Training using GPT embeddings done.")
 
@@ -237,18 +239,19 @@ def classify_embedding(train_data, test_data, _n_splits):
     logger.info("Classification with GPT-3 text embeddings done.")
 
 
-def evaluate_similarity(model_test_results):
+def evaluate_similarity(name, model_test_results):
     # Actual diagnosed data
     test_results_task1 = pd.read_csv(config.test_results_task1)
     real_diagnoses = test_results_task1['Dx']
     predicted_diagnoses = model_test_results['Prediction']
     # Calculate the number of matching values
-    matching_values = sum(real_diagnoses == predicted_diagnoses)
+    matching_values = (real_diagnoses == predicted_diagnoses).sum()
     # Calculate the total number of values
     total_values = len(real_diagnoses)
     # Calculate the percentage of matching values
     similarity_percentage = (matching_values / total_values) * 100
-    print(f"The similarity between the real and predicted diagnoses is {similarity_percentage:.2f}%.")
+    logger.info(f"The similarity between the real and predicted diagnoses using model {name} "
+                f"is {similarity_percentage:.2f}%.")
 
 
 # Tune hyperparameters with GridSearchCV
@@ -468,7 +471,7 @@ def classify_acoustic(acoustic_features_csv, transcription_csv, _n_splits):
         model.set_params(**best_params)
 
         # Perform cross-validation with custom scoring metrics and best params
-        results = cross_validation(name, model, X, y, cv)
+        results = cross_validation(model, X, y, cv)
         logger.debug(results)
         results_df = results_to_df(name, results, results_df)
 
