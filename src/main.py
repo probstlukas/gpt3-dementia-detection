@@ -68,8 +68,6 @@ def main():
                 train_tokenization = embedding.tokenization(train_df, tokenizer)
                 test_tokenization = embedding.tokenization(test_df, tokenizer)
 
-                train_tokenization = embedding.add_train_scores(train_tokenization)
-
                 # Create embeddings
                 train_embeddings = embedding.create_embeddings(train_tokenization)
                 test_embeddings = embedding.create_embeddings(test_tokenization)

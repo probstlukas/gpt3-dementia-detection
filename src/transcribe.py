@@ -5,8 +5,10 @@ from pathlib import Path
 import whisper
 import os
 import codecs
-from utils.df_conversion import df_to_csv
+from matplotlib import pyplot as plt
 import pandas as pd
+from sklearn.utils import resample
+from utils.df_conversion import df_to_csv
 
 
 def transcribe():
@@ -25,8 +27,13 @@ def transcribe():
     write_transcription(diagnosis_test_audio_files, config.diagnosis_test_transcription_dir, whisper_model)
 
     # Scrape all transcriptions and save it to a csv file
-    scrape_transcriptions(config.diagnosis_train_transcription_dir, config.train_scraped_path)
-    scrape_transcriptions(config.diagnosis_test_transcription_dir, config.test_scraped_path)
+    train_df = transcription_to_df(config.diagnosis_train_transcription_dir)
+    train_df = add_train_scores(train_df)
+
+    test_df = transcription_to_df(config.diagnosis_test_transcription_dir)
+
+    df_to_csv(train_df, config.train_scraped_path)
+    df_to_csv(test_df, config.test_scraped_path)
 
     logger.info("Transcription done.")
 
@@ -88,7 +95,49 @@ def transcription_to_df(data_dir):
     return df
 
 
-def scrape_transcriptions(data_dir, file_path):
-    df = transcription_to_df(data_dir)
-    df.to_csv(file_path)
-    logger.info(f"Writing {file_path}...")
+def add_train_scores(df):
+    # reading two csv files
+    text_data = df
+    logger.debug(text_data)
+    scores_df = pd.read_csv(config.diagnosis_train_scores)
+    # Rename columns for consistency
+    scores_df = scores_df.rename(columns={'adressfname': 'addressfname', 'dx': 'diagnosis'})
+    scores_df = binarize_labels(scores_df)
+    logger.debug(scores_df)
+
+    # using merge function by setting how='inner'
+    output = pd.merge(text_data,
+                      scores_df[['addressfname', 'mmse', 'diagnosis']],  # We don't want the key column here
+                      on='addressfname',
+                      how='inner')
+
+    logger.debug(output)
+    return output
+
+
+def binarize_labels(df):
+    # Transform into binary classification
+    df['diagnosis'] = [1 if label == 'ad' else 0 for label in df['diagnosis']]
+    # How many data points for each class?
+    # print(df.dx.value_counts())
+    # Understand the data
+    # sns.countplot(x='dx', data=df)  # 1 - diagnosed   0 - control group
+
+    ### Balance data by down-sampling majority class
+    # Separate majority and minority classes
+    df_majority = df[df['diagnosis'] == 1]  # 87 ad datapoints
+    df_minority = df[df['diagnosis'] == 0]  # 79 cn datapoints
+    # print(len(df_minority))
+    # Undersample majority class
+    df_majority_downsampled = resample(df_majority,
+                                       replace=False,  # sample without replacement
+                                       n_samples=len(df_minority),  # to match minority class
+                                       random_state=42)  # reproducible results
+
+    # Combine undersampled majority class with minority class
+    df_downsampled = pd.concat([df_majority_downsampled, df_minority])
+    # Display new class counts
+    # print(df_downsampled.dx.value_counts())
+    # sns.countplot(x='dx', data=df_downsampled)  # 1 - diagnosed   0 - control group
+    plt.show()
+    return df_downsampled

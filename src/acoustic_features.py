@@ -14,7 +14,7 @@ def feature_vectors_exists():
 
 
 def save_feature_vectors(transcription_csv):
-    file_label_dict = dict(zip(transcription_csv['adressfname'], transcription_csv['dx']))
+    file_label_dict = dict(zip(transcription_csv['addressfname'], transcription_csv['dx']))
 
     # Create an instance of the openSMILE feature extractor
     smile_lowlevel = opensmile.Smile(
@@ -43,6 +43,7 @@ def save_feature_vectors(transcription_csv):
     for audio_file in audio_files:
         filename = Path(audio_file).stem
         label = file_label_dict.get(filename)
+        logger.debug(label)
 
         # Check if the label is not None (i.e., the filename was found in the DataFrame)
         if label is not None:
