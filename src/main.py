@@ -84,20 +84,25 @@ def main():
             test_embeddings_array = classification.embeddings_to_array(config.test_embeddings_path)
 
             classification.classify_embedding(train_embeddings_array, test_embeddings_array, config.n_splits)
+
         elif classification_type_prompt == "acoustic":
-            transcription_csv = pd.read_csv(config.train_scraped_path)
+            create_acoustic_features = False
+            # Check if there are already older feature vectors
             if acoustic_features.feature_vectors_exists():
                 acoustic_vectors_prompt = get_user_input("Acoustic feature vectors have been created in the past."
                                                          "Would you like to overwrite them? (yes/no): ",
                                                          yes_choices
                                                          + no_choices)
                 if acoustic_vectors_prompt in yes_choices:
-                    logger.info("Initiating acoustic feature vectors...")
-                    acoustic_features.save_feature_vectors()
-                    logger.info("Acoustic feature vectors done.")
+                    create_acoustic_features = True
                 else:
                     logger.info("Acoustic feature vectors skipped.")
             else:
+                create_acoustic_features = True
+                logger.info("Acoustic feature vectors not found. Creating them automatically...")
+
+            transcription_csv = pd.read_csv(config.train_scraped_path)
+            if create_acoustic_features:
                 logger.info("Initiating acoustic feature vectors...")
                 acoustic_features.save_feature_vectors(transcription_csv)
                 logger.info("Acoustic feature vectors done.")
