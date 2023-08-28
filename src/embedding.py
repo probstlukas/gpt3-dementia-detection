@@ -56,8 +56,6 @@ def binarize_labels(df):
     return df_downsampled
 
 
-### Tokenization
-
 def tokenization(df, tokenizer):
     """
     Tokenize text in a DataFrame and handle chunking for texts exceeding a maximum token limit.
