@@ -16,6 +16,7 @@ def tokenization(df, tokenizer):
     Returns:
         pandas.DataFrame: Processed DataFrame with added 'n_tokens' column and potentially split text chunks.
     """
+    df_columns = df.columns
     # Tokenize the text and save the number of tokens to a new column
     df['n_tokens'] = df['transcript'].apply(lambda x: len(tokenizer.encode(x)))
 
@@ -65,9 +66,12 @@ def tokenization(df, tokenizer):
         if row['n_tokens'] > config.max_tokens:
             row_chunks = split_into_many(row['transcript'], max_tokens=config.max_tokens)
             for chunk in row_chunks:
-                shortened.append({'addressfname': row['addressfname'], 'transcript': chunk})
+                # Append the appropriate columns using df_columns
+                columns_to_append = {col: row[col] for col in df_columns if col in row}
+                columns_to_append['transcript'] = chunk
+                shortened.append(columns_to_append)
         else:
-            shortened.append({'addressfname': row['addressfname'], 'transcript': row['transcript']})
+            shortened.append({col: row[col] for col in df_columns})
 
     df_shortened = pd.DataFrame(shortened)
     df_shortened['n_tokens'] = df_shortened['transcript'].apply(lambda x: len(tokenizer.encode(x)))

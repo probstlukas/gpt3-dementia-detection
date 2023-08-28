@@ -1,7 +1,7 @@
 from config import logger
 from pathlib import Path
 import config
-from utils.fetch_audio import fetch_audio_files
+from utils.utils import fetch_audio_files
 import opensmile
 import pandas as pd
 
@@ -14,7 +14,7 @@ def feature_vectors_exists():
 
 
 def save_feature_vectors(transcription_csv):
-    file_label_dict = dict(zip(transcription_csv['addressfname'], transcription_csv['dx']))
+    file_label_dict = dict(zip(transcription_csv['addressfname'], transcription_csv['diagnosis']))
 
     # Create an instance of the openSMILE feature extractor
     smile_lowlevel = opensmile.Smile(
