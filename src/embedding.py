@@ -132,9 +132,8 @@ def tokenization(df, tokenizer):
 
 
 def create_embeddings(df):
-    # TODO: Add engine to config
     df['embedding'] = df['transcript'].apply(
-        lambda x: openai.Embedding.create(input=x, engine='text-embedding-ada-002')['data'][0]['embedding'])
+        lambda x: openai.Embedding.create(input=x, engine=config.embedding_engine)['data'][0]['embedding'])
     df = df.drop('transcript', axis=1)
     return df
 
