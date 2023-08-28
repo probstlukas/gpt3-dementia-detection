@@ -8,7 +8,7 @@ import transcribe
 import acoustic_features
 from config import logger
 from utils.input_utils import get_user_input
-from utils.utils import df_to_csv
+from utils.df_conversion import df_to_csv
 
 
 def main():

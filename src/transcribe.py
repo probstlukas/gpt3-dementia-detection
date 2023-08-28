@@ -5,7 +5,7 @@ from pathlib import Path
 import whisper
 import os
 import codecs
-from utils.utils import df_to_csv
+from utils.df_conversion import df_to_csv
 import pandas as pd
 
 
