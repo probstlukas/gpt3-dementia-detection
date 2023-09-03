@@ -309,7 +309,7 @@ def visualize_results(_n_splits, name, results, save_dir):
     plot_accuracy_path = (save_dir / f'plot_accuracy_{name}.png').resolve()
     plot_precision_path = (save_dir / f'plot_precision_{name}.png').resolve()
     plot_recall_path = (save_dir / f'plot_recall_{name}.png').resolve()
-    plot_f1_path = (save_dir / f'plot_precision_{name}.png').resolve()
+    plot_f1_path = (save_dir / f'plot_f1_{name}.png').resolve()
     # Plot Accuracy Result
     plot_result(name,
                 "Accuracy",
