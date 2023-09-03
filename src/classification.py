@@ -343,7 +343,7 @@ def visualize_results(_n_splits, name, results, save_dir):
 def results_to_df(name, scores, results_df):
     results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Train',
                                                        'Model': name,
-                                                       'Accuracy': f"{scores['train_accuracy_mean']}"
+                                                       'Accuracy': f"{scores['train_accuracy_mean']} "
                                                                    f"({scores['train_accuracy_std']})",
                                                        'Precision': f"{scores['train_precision_mean']} "
                                                                     f"({scores['train_precision_std']})",
