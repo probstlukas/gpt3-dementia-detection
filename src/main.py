@@ -71,10 +71,10 @@ def main():
 
             logger.info("Embedding done.")
 
-            train_embeddings_array = classification.embeddings_to_array(config.train_embeddings_path)
-            test_embeddings_array = classification.embeddings_to_array(config.test_embeddings_path)
+        train_embeddings_array = classification.embeddings_to_array(config.train_embeddings_path)
+        test_embeddings_array = classification.embeddings_to_array(config.test_embeddings_path)
 
-            classification.classify_embedding(train_embeddings_array, test_embeddings_array, config.n_splits)
+        classification.classify_embedding(train_embeddings_array, test_embeddings_array, config.n_splits)
     else:
         logger.info("Classification skipped.")
 
