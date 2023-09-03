@@ -8,7 +8,7 @@
     <img src="images/teco.png" alt="Logo" width="150" height="150">
   </a>
 
-<h3 align="center">Prediction of Dementia Based on Speech Using GPT-3 Text Embeddings</h3>
+<h3 align="center">Predicting Dementia Based on Speech Using GPT-3 Text Embeddings.</h3>
 
   <p align="center">
     Dementia is the loss of cognitive function, which affects how a person can use language and communicate.
@@ -18,12 +18,12 @@
     By utilizing GPT-3 text embeddings, we seek to develop an innovative tool that can assist in the early 
     detection of dementia.
     <br />
-    <a href="https://github.com/probstlukas/TECO"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/probstlukas/gpt3-dementia-detection"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/probstlukas/TECO/issues">Report Bug</a>
+    <a href="https://github.com/probstlukas/gpt3-dementia-detection/issues">Report Bug</a>
     ·
-    <a href="https://github.com/probstlukas/TECO/issues">Request Feature</a>
+    <a href="https://github.com/probstlukas/gpt3-dementia-detection/issues">Request Feature</a>
   </p>
 </div>
 
@@ -109,7 +109,7 @@ Now replace the original audio files with the formatted files in the `fix` folde
     ```
 1. Clone the repo
    ```sh
-   git clone https://github.com/probstlukas/TECO.git
+   git clone https://github.com/probstlukas/gpt3-dementia-detection.git
    ```
 2. Install required Python packages
    ```sh
