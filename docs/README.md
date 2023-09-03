@@ -8,7 +8,7 @@
     <img src="images/teco.png" alt="Logo" width="150" height="150">
   </a>
 
-<h3 align="center">Predicting Dementia Based on Speech Using GPT-3 Text Embeddings.</h3>
+<h3 align="center">Predicting Dementia Based on Speech Using GPT-3 Text Embeddings</h3>
 
   <p align="center">
     Dementia is the loss of cognitive function, which affects how a person can use language and communicate.
