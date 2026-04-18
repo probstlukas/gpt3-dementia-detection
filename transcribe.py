@@ -23,14 +23,7 @@ def transcribe():
     write_transcription(diagnosis_train_audio_files, config.diagnosis_train_transcription_dir, whisper_model)
     write_transcription(diagnosis_test_audio_files, config.diagnosis_test_transcription_dir, whisper_model)
 
-    # Scrape all transcriptions and save it to a csv file
-    train_df = transcription_to_df(config.diagnosis_train_transcription_dir)
-    train_df = add_train_scores(train_df)
-
-    test_df = transcription_to_df(config.diagnosis_test_transcription_dir)
-
-    df_to_csv(train_df, config.train_scraped_path)
-    df_to_csv(test_df, config.test_scraped_path)
+    rebuild_scraped_transcriptions()
 
     logger.info("Transcription done.")
 
@@ -52,6 +45,24 @@ def write_transcription(audio_files, transcription_dir, whisper_model):
 
             transcription_file.write_text(transcription_str)
             logger.info(f"Transcribed {transcription_file}...")
+
+
+def rebuild_scraped_transcriptions():
+    # Scrape all transcriptions and save them to csv files. This keeps label
+    # processing in sync even when we reuse existing transcriptions.
+    train_df = transcription_to_df(config.diagnosis_train_transcription_dir)
+    train_df = add_train_scores(train_df)
+
+    test_df = transcription_to_df(config.diagnosis_test_transcription_dir)
+
+    if train_df.empty or test_df.empty:
+        raise FileNotFoundError("Transcription files are missing. Run transcription first or restore the processed "
+                                "transcription directories.")
+
+    df_to_csv(train_df, config.train_scraped_path)
+    df_to_csv(test_df, config.test_scraped_path)
+
+    return train_df, test_df
 
 
 def transcription_to_df(data_dir):
@@ -78,7 +89,13 @@ def transcription_to_df(data_dir):
     df = pd.DataFrame(texts, columns=['addressfname', 'transcript'])
 
     # Clean up the transcript column by removing newlines and extra spaces
-    df['transcript'] = df['transcript'].str.replace('\n', ' ').replace('\\n', ' ').replace('  ', ' ')
+    df['transcript'] = (
+        df['transcript']
+        .str.replace('\n', ' ', regex=False)
+        .str.replace('\\n', ' ', regex=False)
+        .str.replace(r'\s+', ' ', regex=True)
+        .str.strip()
+    )
 
     # Sort the DataFrame by the 'addressfname' column in ascending order
     df = df.sort_values(by='addressfname')

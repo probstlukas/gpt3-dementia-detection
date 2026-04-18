@@ -93,3 +93,25 @@ def embeddings_exists():
     if config.train_embeddings_path.is_file() and config.test_embeddings_path.is_file():
         return True
     return False
+
+
+def train_embeddings_cover_training_set():
+    if not config.train_embeddings_path.is_file():
+        return False
+
+    train_embeddings = pd.read_csv(config.train_embeddings_path, usecols=['addressfname'])
+    expected_ids = (
+        pd.read_csv(config.diagnosis_train_scores, usecols=['adressfname'])
+        .rename(columns={'adressfname': 'addressfname'})
+    )
+
+    cached_ids = set(train_embeddings['addressfname'])
+    training_ids = set(expected_ids['addressfname'])
+
+    if len(train_embeddings) != len(cached_ids) or cached_ids != training_ids:
+        logger.warning("Cached train embeddings are outdated. "
+                       f"Found embeddings for {len(cached_ids)} training files, "
+                       f"expected {len(training_ids)}.")
+        return False
+
+    return True

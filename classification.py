@@ -3,6 +3,7 @@ import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -10,7 +11,7 @@ from sklearn.metrics import (
     accuracy_score, make_scorer, recall_score, precision_score, f1_score
 )
 from sklearn.model_selection import (
-    KFold, train_test_split, GridSearchCV, cross_validate
+    StratifiedKFold, GridSearchCV, cross_validate
 )
 from sklearn.svm import SVC
 
@@ -32,7 +33,38 @@ def embeddings_to_array(embeddings_file):
     return df
 
 
-def cross_validation(model, _X, _y, _cv):
+def scoring_metrics():
+    return {
+        'accuracy': make_scorer(accuracy_score),
+        'precision': make_scorer(precision_score, average='weighted'),
+        'recall': make_scorer(recall_score, average='weighted'),
+        'f1_score': make_scorer(f1_score, average='macro')
+    }
+
+
+def build_cv(n_splits):
+    return StratifiedKFold(n_splits=n_splits, random_state=42, shuffle=True)
+
+
+def build_grid_search(model, name, cv):
+    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
+    param_grid = None
+    if name == 'SVC':
+        param_grid = svc_param_grid
+    elif name == 'LR':
+        param_grid = lr_param_grid
+    elif name == 'RF':
+        param_grid = rf_param_grid
+
+    return GridSearchCV(estimator=clone(model),
+                        param_grid=param_grid,
+                        cv=cv,
+                        n_jobs=-1,
+                        error_score=0.0,
+                        scoring='accuracy')
+
+
+def cross_validation(estimator, _X, _y, _cv):
     """ Function to perform K-Fold Cross-Validation
     We do this to see which model proves better at predicting the test set points.
     But once we have used cross-validation to evaluate the performance,
@@ -54,21 +86,11 @@ def cross_validation(model, _X, _y, _cv):
      'recall', 'f1' for both training set and validation set.
     """
 
-    # Define custom scoring metrics
-    _scoring = {
-        'accuracy': make_scorer(accuracy_score),  # How many predictions out of the whole were correct?
-        'precision': make_scorer(precision_score, average='weighted'),  # How many out of the predicted
-        # positives were actually positive?
-        'recall': make_scorer(recall_score, average='weighted'),  # How many positive samples are captured
-        # by the positive predictions?
-        'f1_score': make_scorer(f1_score, average='macro')  # How balanced is the tradeoff between precision and recall?
-    }
-
-    scores = cross_validate(estimator=model,
+    scores = cross_validate(estimator=estimator,
                             X=_X,
                             y=_y,
                             cv=_cv,
-                            scoring=_scoring,
+                            scoring=scoring_metrics(),
                             return_train_score=True)
 
     metrics = ['accuracy', 'precision', 'recall', 'f1_score']
@@ -76,12 +98,13 @@ def cross_validation(model, _X, _y, _cv):
     result = {}
 
     for metric in metrics:
-        train_scores = scores[f'test_{metric}']
+        train_scores = scores[f'train_{metric}']
         train_scores_mean = round(train_scores.mean(), 3)
         train_scores_std = round(train_scores.std(), 3)
 
         test_scores = scores[f'test_{metric}']
         test_scores_mean = round(test_scores.mean(), 3)
+        test_scores_std = round(test_scores.std(), 3)
 
         result[f'train_{metric}'] = train_scores
         result[f'train_{metric}_mean'] = train_scores_mean
@@ -89,6 +112,7 @@ def cross_validation(model, _X, _y, _cv):
 
         result[f'test_{metric}'] = test_scores
         result[f'test_{metric}_mean'] = test_scores_mean
+        result[f'test_{metric}_std'] = test_scores_std
 
     return result
 
@@ -135,21 +159,27 @@ def classify_embedding(train_data, test_data, _n_splits):
     # Test data which is only used after training the model with the train data
     X_test = test_data['embedding'].to_list()
 
-    baseline_score = dummy_stratified_clf(X_train, y_train)
-    logger.debug(f"Baseline performance of the dummy classifier: {baseline_score}")
+    outer_cv = build_cv(_n_splits)
+    inner_cv = build_cv(min(5, _n_splits))
+
+    baseline_scores = cross_validation(DummyClassifier(strategy='stratified', random_state=42),
+                                       X_train,
+                                       y_train,
+                                       outer_cv)
+    logger.debug(f"Baseline dummy classifier scores: {baseline_scores}")
 
     # Create models
-    models = [SVC(), LogisticRegression(), RandomForestClassifier()]
+    models = [SVC(probability=True, random_state=42),
+              LogisticRegression(random_state=42),
+              RandomForestClassifier(random_state=42)]
     names = ['SVC', 'LR', 'RF']
-
-    # Split the dataset into k equal partitions (each partition is divided in train and validation data)
-    cv = KFold(n_splits=_n_splits, random_state=42, shuffle=True)
 
     # Prepare dataframe for results
     results_df = pd.DataFrame(columns=['Set', 'Model', 'Accuracy', 'Precision', 'Recall', 'F1'])
     models_size_df = pd.DataFrame(columns=['Model', 'Size'])
 
     logger.info("Beginning to train models using GPT embeddings...")
+    results_df = results_to_df('Dummy', baseline_scores, results_df)
 
     # Collect total size of all models
     total_models_size = 0
@@ -158,10 +188,11 @@ def classify_embedding(train_data, test_data, _n_splits):
         logger.info(f"Initiating {name}...")
 
         ### Model checking
-        best_params = hyperparameter_optimization(X_train, y_train, cv, model, name)
-        model.set_params(**best_params)
-        scores = cross_validation(model, X_train, y_train, cv)
+        scores = cross_validation(build_grid_search(model, name, inner_cv), X_train, y_train, outer_cv)
         results_df = results_to_df(name, scores, results_df)
+        best_params = hyperparameter_optimization(X_train, y_train, inner_cv, model, name)
+        logger.info(f"Best parameters for {name}: {best_params}")
+        model.set_params(**best_params)
 
         # Visualize folds for different metrics in plots
         visualize_results(_n_splits, name, scores, (config.embedding_results_dir / "plots").resolve())
@@ -187,8 +218,15 @@ def classify_embedding(train_data, test_data, _n_splits):
         # Load the empty task1 results CSV file
         model_test_results = pd.read_csv(config.empty_test_results_file)
 
-        # Predict label on test data with trained model
         model_predictions = model.predict(X_test)
+        if hasattr(model, 'predict_proba'):
+            model_probabilities = model.predict_proba(X_test)
+            positive_class_index = int(np.where(model.classes_ == 1)[0][0])
+            positive_probabilities = model_probabilities[:, positive_class_index]
+            predictions_with_confidence = ["{} ({:.2f})".format(int(pred), prob) for pred, prob in
+                                           zip(model_predictions, positive_probabilities)]
+            logger.info(f"{name} probabilities: {model_probabilities}")
+            logger.info(f"{predictions_with_confidence}")
 
         # Create a dictionary to store the filename-prediction value pairs
         filename_to_prediction = {}
@@ -207,19 +245,16 @@ def classify_embedding(train_data, test_data, _n_splits):
         logger.info(f"Writing {model_test_results_csv}...")
 
         # Evaluate performance on test data
-        evaluate_similarity(name, model_test_results)
+        test_metrics = evaluate_similarity(name, model_test_results)
+        results_df = test_results_to_df(name, test_metrics, results_df)
 
     logger.info("Training using GPT embeddings done.")
 
     # Adjust resulting dataframe
-    results_df = results_df.sort_values(by='Set', ascending=False)
-    results_df = results_df.reset_index(drop=True)
-
-    # Add baseline score to dataframe
-    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
-                                                       'Model': 'Dummy',
-                                                       'Accuracy': baseline_score,
-                                                       }])], ignore_index=True)
+    results_df['Set'] = pd.Categorical(results_df['Set'],
+                                       categories=['Train', 'Validation', 'Test'],
+                                       ordered=True)
+    results_df = results_df.sort_values(by=['Model', 'Set']).reset_index(drop=True)
 
     # Save results to csv
     embedding_results_file = (config.embedding_results_dir / 'embedding_results.csv').resolve()
@@ -240,32 +275,34 @@ def classify_embedding(train_data, test_data, _n_splits):
 
 
 def evaluate_similarity(name, model_test_results):
-    # Actual diagnosed data
     test_results_task1 = pd.read_csv(config.test_results_task1)
-    real_diagnoses = test_results_task1['Dx']
-    predicted_diagnoses = model_test_results['Prediction']
-    # Calculate the number of matching values
-    matching_values = (real_diagnoses == predicted_diagnoses).sum()
-    # Calculate the total number of values
-    total_values = len(real_diagnoses)
-    # Calculate the percentage of matching values
-    similarity_percentage = (matching_values / total_values) * 100
-    logger.info(f"The similarity between the real and predicted diagnoses using model {name} "
-                f"is {similarity_percentage:.2f}%.")
+    evaluation_df = pd.merge(test_results_task1,
+                             model_test_results[['ID', 'Prediction']],
+                             on='ID',
+                             how='left',
+                             validate='one_to_one')
+
+    if evaluation_df['Prediction'].isna().any():
+        missing_ids = evaluation_df.loc[evaluation_df['Prediction'].isna(), 'ID'].tolist()
+        raise ValueError(f"Missing predictions for test IDs: {missing_ids}")
+
+    real_diagnoses = evaluation_df['Dx']
+    predicted_diagnoses = evaluation_df['Prediction']
+
+    test_metrics = {
+        'accuracy': round(accuracy_score(real_diagnoses, predicted_diagnoses), 3),
+        'precision': round(precision_score(real_diagnoses, predicted_diagnoses, average='weighted'), 3),
+        'recall': round(recall_score(real_diagnoses, predicted_diagnoses, average='weighted'), 3),
+        'f1_score': round(f1_score(real_diagnoses, predicted_diagnoses, average='macro'), 3)
+    }
+    logger.info(f"Test accuracy for model {name}: {test_metrics['accuracy']:.3f}.")
+
+    return test_metrics
 
 
 # Tune hyperparameters with GridSearchCV
 def hyperparameter_optimization(X_train, y_train, cv, model, name):
-    # Get the parameter grids
-    lr_param_grid, rf_param_grid, svc_param_grid = param_grids()
-    grid_search = None
-    if name == 'SVC':
-        grid_search = GridSearchCV(estimator=model, param_grid=svc_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-    elif name == 'LR':
-        grid_search = GridSearchCV(estimator=model, param_grid=lr_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-    elif name == 'RF':
-        grid_search = GridSearchCV(estimator=model, param_grid=rf_param_grid, cv=cv, n_jobs=-1, error_score=0.0)
-
+    grid_search = build_grid_search(model, name, cv)
     grid_search.fit(X_train, y_train)
     best_params = grid_search.best_params_
     return best_params
@@ -353,12 +390,27 @@ def results_to_df(name, scores, results_df):
                                                              f"({scores['train_f1_score_std']})",
                                                        }])], ignore_index=True)
 
+    results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Validation',
+                                                       'Model': name,
+                                                       'Accuracy': f"{scores['test_accuracy_mean']} "
+                                                                   f"({scores['test_accuracy_std']})",
+                                                       'Precision': f"{scores['test_precision_mean']} "
+                                                                    f"({scores['test_precision_std']})",
+                                                       'Recall': f"{scores['test_recall_mean']} "
+                                                                 f"({scores['test_recall_std']})",
+                                                       'F1': f"{scores['test_f1_score_mean']} "
+                                                             f"({scores['test_f1_score_std']})"
+                                                       }])], ignore_index=True)
+    return results_df
+
+
+def test_results_to_df(name, scores, results_df):
     results_df = pd.concat([results_df, pd.DataFrame([{'Set': 'Test',
                                                        'Model': name,
-                                                       'Accuracy': scores['test_accuracy_mean'],
-                                                       'Precision': scores['test_precision_mean'],
-                                                       'Recall': scores['test_recall_mean'],
-                                                       'F1': scores['test_f1_score_mean']
+                                                       'Accuracy': scores['accuracy'],
+                                                       'Precision': scores['precision'],
+                                                       'Recall': scores['recall'],
+                                                       'F1': scores['f1_score']
                                                        }])], ignore_index=True)
     return results_df
 
@@ -392,8 +444,7 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data, savefig_path
 
     # Set size of plot
     fig = plt.figure(figsize=(12, 6))
-    labels = ["1st Fold", "2nd Fold", "3rd Fold", "4th Fold", "5th Fold", "6th Fold", "7th Fold", "8th Fold",
-              "9th Fold", "10th Fold"]
+    labels = [f"Fold {fold_idx}" for fold_idx in range(1, len(train_data) + 1)]
     X_axis = np.arange(len(labels))
     plt.ylim(0.40000, 1)
     plt.bar(X_axis - 0.2, train_data, 0.4, color='blue', label='Training')
@@ -407,19 +458,3 @@ def plot_result(x_label, y_label, plot_title, train_data, val_data, savefig_path
     plt.show()
     if savefig_path is not None:
         fig.savefig(savefig_path, dpi=fig.dpi)
-
-
-def dummy_stratified_clf(X, y):
-    """
-    DummyClassifier makes predictions that ignore the input features.
-
-    This classifier serves as a simple baseline to compare against other more complex classifiers.
-    It gives us a measure of “baseline” performance — i.e. the success rate one should expect to achieve even
-    if simply guessing.
-    """
-    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
-    stratified_clf = DummyClassifier(strategy='stratified').fit(X_train, y_train)
-
-    score = round(stratified_clf.score(X_test, y_test), 3)
-
-    return score

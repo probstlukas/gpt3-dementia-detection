@@ -1,5 +1,4 @@
 import openai
-import pandas as pd
 
 import classification
 import config
@@ -40,22 +39,26 @@ def main():
         create_embeddings = False
         # Check if there are already older embeddings
         if embedding.embeddings_exists():
-            embedding_prompt = get_user_input("There already seem to exist some embeddings. "
-                                              "Would you like to create new embeddings? (yes/no): ",
-                                              yes_choices + no_choices)
-            if embedding_prompt in yes_choices:
+            if not embedding.train_embeddings_cover_training_set():
                 create_embeddings = True
+                logger.info("Cached train embeddings do not cover the full training set. Recreating embeddings...")
             else:
-                logger.info("Embedding skipped.")
+                embedding_prompt = get_user_input("There already seem to exist some embeddings. "
+                                                  "Would you like to create new embeddings? (yes/no): ",
+                                                  yes_choices + no_choices)
+                if embedding_prompt in yes_choices:
+                    create_embeddings = True
+                else:
+                    logger.info("Embedding skipped.")
         else:
             create_embeddings = True
             logger.info("Embeddings not found. Creating embeddings automatically...")
 
         if create_embeddings:
             logger.info("Initiating embedding...")
-            # Read transcriptions and prepare csv files
-            train_df = pd.read_csv(config.train_scraped_path)
-            test_df = pd.read_csv(config.test_scraped_path)
+            # Rebuild the scraped transcription csvs from the existing
+            # transcription files so label handling changes are picked up.
+            train_df, test_df = transcribe.rebuild_scraped_transcriptions()
 
             # Tokenization
             train_tokenization = embedding.tokenization(train_df, tokenizer)

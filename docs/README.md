@@ -151,8 +151,8 @@ We use three different models: Support Vector Machine, Logistic Regression, and 
 The classification process can be divided into two parts:
 
 #### Model checking
-* Perform K-fold cross-validation on the training set: split it into K equal partitions, where each partition is divided into training and validation set.
-* Hyperparameter optimization
+* Perform nested stratified K-fold cross-validation on the training set.
+* Tune hyperparameters on inner folds and report validation metrics from outer folds.
 * Record model performance (accuracy, precision, recall, f1-score)
 * Visualize results: one plot for each metric per model, resulting in a total of 12 plots. For example, this plot relates to the accuracy metric for the logistic regression model: 
 
@@ -172,7 +172,7 @@ All processed data and results are stored in the configured directories specifie
 
 <!-- RESULTS -->
 ## Results
-These results were obtained with the following configuration:
+After rerunning the pipeline with the corrected evaluation flow, the results table will contain rows like the following:
 * Whisper model: `base`
 * Embedding engine: `text-embedding-ada-002`
 * Number of splits for the K-Fold CV: `K=10`
@@ -186,13 +186,16 @@ These results were obtained with the following configuration:
 
 |Set|Model| Accuracy      |Precision   |Recall       |F1           |
 |---|-----|---------------|------------|-------------|-------------|
-|Train|SVC  | 0.779 (0.084) |0.839 (0.048)|0.779 (0.084)|0.772 (0.084)|
-|Train|LR   | 0.81 (0.085)  |0.847 (0.07)|0.81 (0.085) |0.8 (0.091)  |
-|Train|RF   | 0.804 (0.052) |0.839 (0.044)|0.804 (0.052)|0.793 (0.053)|
-|Test|SVC  | 0.779         |0.839       |0.779        |0.772        |
-|Test|LR   | 0.81          |0.847       |0.81         |0.8          |
-|Test|RF   | 0.804         |0.839       |0.804        |0.793        |
-|Test|Dummy| 0.425         |            |             |             |
+|Train|SVC  | ... |...|...|...|
+|Validation|SVC  | ... |...|...|...|
+|Test|SVC  | ... |...|...|...|
+|Train|LR   | ... |...|...|...|
+|Validation|LR   | ... |...|...|...|
+|Test|LR   | ... |...|...|...|
+|Train|RF   | ... |...|...|...|
+|Validation|RF   | ... |...|...|...|
+|Test|RF   | ... |...|...|...|
+|Validation|Dummy| ... |...|...|...|
 
 
 Our results show that GPT-3 text embeddings can be used to reliably distinguish individuals with Alzheimer's disease 
