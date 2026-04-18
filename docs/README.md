@@ -55,7 +55,14 @@
         <li><a href="#classification">Classification</a></li>
       </ul>
     </li>
-    <li><a href="#results">Results</a></li>
+    <li>
+      <a href="#results">Results</a>
+      <ul>
+        <li><a href="#run-configuration">Run Configuration</a></li>
+        <li><a href="#performance">Performance</a></li>
+        <li><a href="#selected-plots">Selected Plots</a></li>
+      </ul>
+    </li>
     <li><a href="#license">License</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
@@ -90,10 +97,10 @@ To get a local copy up and running follow these steps.
 
 To gain access to the data used in this project, you must first join as a [DementiaBank member](https://dementia.talkbank.org/index.html).
 
-For simplicity, we used the dataset provided for the [ADReSSo-challenge](https://dementia.talkbank.org/ADReSS-2021/) which has been balanced with respect to age and gender in order to eliminate potential confunding and bias.
+For simplicity, we used the dataset provided for the [ADReSSo-challenge](https://dementia.talkbank.org/ADReSS-2021/) which has been balanced with respect to age and gender in order to eliminate potential confounding and bias.
 
-In our case, the downloaded ADReSSo audio files had an incompatible format to transcribe them with Whisper. 
-Therefore, we first had to format them with ffmepg. 
+In our case, the downloaded ADReSSo audio files had an incompatible format to transcribe them with Whisper.
+Therefore, we first had to format them with ffmpeg.
 Since we cannot reformat and replace the files at the same time, we have to save them temporarily and then replace the old files:
 ```sh
 find . -name '*.wav' -exec sh -c 'mkdir -p fix && ffmpeg -i "$0" "fix/$(basename "$0")"' {} \;
@@ -103,15 +110,15 @@ Now replace the original audio files with the formatted files in the `fix` folde
 ### Installation
 
 1. Get an OpenAI API Key at [https://platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys).
-2. Set an environment variable 'OPENAI\_API\_KEY' (replace ~/.zshrc with ~/.bashrc if you use Bash):
+2. Set an environment variable `OPENAI_API_KEY` (replace `~/.zshrc` with `~/.bashrc` if you use Bash):
     ```sh
     echo "export OPENAI\_API\_KEY='your key'" | cat >> ~/.zshrc
     ```
-1. Clone the repo
+3. Clone the repo:
    ```sh
    git clone https://github.com/probstlukas/gpt3-dementia-detection.git
    ```
-2. Install required Python packages
+4. Install required Python packages:
    ```sh
    pip install -r requirements.txt
    ```
@@ -136,8 +143,8 @@ If the data has not yet been transcribed, confirm with `yes`, select your prefer
 ![CLI-embedding](images/cli-embedding.png)
  
 The embeddings are created separately for training and test data. `train_embeddings.csv` also contains the MMSE score and the diagnosis label for each audio file.
-#### Remark 
-It is not necessary to scale the embeddings before using them. They are already normalized and are in the vector space with a certain distribution.
+
+**Remark:** It is not necessary to scale the embeddings before using them. They are already normalized and are in the vector space with a certain distribution.
 
 ### Classification
 ![CLI-classify](images/cli-classify.png)
@@ -154,9 +161,7 @@ The classification process can be divided into two parts:
 * Perform nested stratified K-fold cross-validation on the training set.
 * Tune hyperparameters on inner folds and report validation metrics from outer folds.
 * Record model performance (accuracy, precision, recall, f1-score)
-* Visualize results: one plot for each metric per model, resulting in a total of 12 plots. For example, this plot relates to the accuracy metric for the logistic regression model: 
-
-<img src="images/plot_accuracy_LR.png" alt="plot_accuracy_LR" width="600"/>
+* Visualize results: one plot for each metric per model, resulting in a total of 12 plots.
 
 #### Model building
 * Train each model on the entire training set with the best hyperparameters.
@@ -164,7 +169,11 @@ The classification process can be divided into two parts:
 * Evaluate performance by comparing the results to real medical diagnoses.
 * Record trained model sizes.
 
-All processed data and results are stored in the configured directories specified in `config.py`.
+The classification step writes its outputs to `results/embedding/`, including:
+* `embedding_results.csv` with train, validation, and test metrics.
+* `embedding_models_size.csv` with serialized model sizes.
+* `task1_*.csv` files with test predictions for each classifier.
+* `plots/*.png` with fold-wise training vs. validation plots for each metric and model.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -172,34 +181,58 @@ All processed data and results are stored in the configured directories specifie
 
 <!-- RESULTS -->
 ## Results
-After rerunning the pipeline with the corrected evaluation flow, the results table will contain rows like the following:
+### Run Configuration
+
+The following results and plots were obtained with this run configuration:
 * Whisper model: `base`
 * Embedding engine: `text-embedding-ada-002`
-* Number of splits for the K-Fold CV: `K=10`
+* Outer cross-validation: nested stratified `K=10`
+* Inner cross-validation for hyperparameter search: `K=5`
+* Evaluated classifiers: `SVC`, `LogisticRegression`, `RandomForestClassifier`
+
+### Performance
 
 |Model|Size |
 |-----|-----|
-|SVC  |1441162 B|
-|LR   |13007 B|
-|RF   |82947 B|
-|Total|1537116 B|
+|SVC  |1625787 B|
+|LR   |13010 B|
+|RF   |175183 B|
+|Total|1813980 B|
 
 |Set|Model| Accuracy      |Precision   |Recall       |F1           |
 |---|-----|---------------|------------|-------------|-------------|
-|Train|SVC  | ... |...|...|...|
-|Validation|SVC  | ... |...|...|...|
-|Test|SVC  | ... |...|...|...|
-|Train|LR   | ... |...|...|...|
-|Validation|LR   | ... |...|...|...|
-|Test|LR   | ... |...|...|...|
-|Train|RF   | ... |...|...|...|
-|Validation|RF   | ... |...|...|...|
-|Test|RF   | ... |...|...|...|
-|Validation|Dummy| ... |...|...|...|
+|Train|SVC  | 0.918 (0.031) |0.923 (0.028)|0.918 (0.031)|0.918 (0.031)|
+|Validation|SVC  | 0.771 (0.107) |0.785 (0.099)|0.771 (0.107)|0.766 (0.112)|
+|Test|SVC  | 0.817 |0.823|0.817|0.816|
+|Train|LR   | 0.959 (0.034) |0.959 (0.034)|0.959 (0.034)|0.958 (0.034)|
+|Validation|LR   | 0.802 (0.095) |0.809 (0.098)|0.802 (0.095)|0.8 (0.095)|
+|Test|LR   | 0.845 |0.845|0.845|0.845|
+|Train|RF   | 0.985 (0.026) |0.985 (0.026)|0.985 (0.026)|0.985 (0.026)|
+|Validation|RF   | 0.728 (0.074) |0.74 (0.078)|0.728 (0.074)|0.724 (0.073)|
+|Test|RF   | 0.746 |0.747|0.746|0.746|
+|Train|Dummy| 0.517 (0.011) |0.514 (0.011)|0.517 (0.011)|0.512 (0.011)|
+|Validation|Dummy| 0.417 (0.068) |0.417 (0.07)|0.417 (0.068)|0.415 (0.069)|
 
+The metrics show a consistent ranking across validation and held-out test data:
+* Logistic Regression performs best overall with the strongest validation accuracy (`0.802`) and test accuracy (`0.845`).
+* SVC is the second-best model and generalizes better than Random Forest on the held-out test set.
+* Random Forest reaches the highest training scores but also shows the largest training-validation gap, which is visible in the plots and points to overfitting.
 
-Our results show that GPT-3 text embeddings can be used to reliably distinguish individuals with Alzheimer's disease 
-from healthy individuals from the control group, just by analyzing their speech behavior.
+### Selected Plots
+
+The plots below highlight the clearest takeaways from the documented run:
+* Logistic Regression accuracy: best overall validation and test performance.
+* Logistic Regression F1: strongest balance between precision and recall across folds.
+* Random Forest accuracy: clearest sign of overfitting, with training scores near `1.0` and weaker validation scores.
+
+<img src="images/plot_accuracy_LR.png" alt="plot_accuracy_LR" width="600"/>
+
+<img src="images/plot_f1_LR.png" alt="plot_f1_LR" width="600"/>
+
+<img src="images/plot_accuracy_RF.png" alt="plot_accuracy_RF" width="600"/>
+
+These results show that GPT-3 text embeddings can be used to distinguish individuals with Alzheimer's disease
+from healthy individuals in the control group based on their speech behavior, while model selection and validation strategy have a strong impact on the reported performance.
 
 <!-- LICENSE -->
 ## License
