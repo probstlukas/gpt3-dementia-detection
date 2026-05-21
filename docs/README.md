@@ -73,7 +73,7 @@ This project was created during my position as a research assistant at Karlsruhe
 It involves several steps: 
 * Transcription using [Whisper](https://openai.com/research/whisper) 
 * Creation of [GPT-3 text embeddings](https://platform.openai.com/docs/guides/embeddings) to leverage contextual depth from the transcribed text
-* Training machine learning models using the extracted features
+* Training supervised machine learning classifiers using the extracted embedding features and diagnosis labels
 * Prediction on test data
 
 ### Built With
@@ -140,12 +140,20 @@ If the data has not yet been transcribed, confirm with `yes`, select your prefer
  
 The embeddings are created separately for training and test data. `train_embeddings.csv` also contains the MMSE score and the diagnosis label for each audio file.
 
+The embedding step uses only the transcript text as input to the embedding model. This keeps the feature extraction step independent from the target labels and avoids label leakage: the embedding should represent what is present in the transcript, not the known diagnosis.
+
+Diagnosis labels are carried forward with the training rows and used later as supervised classification targets. MMSE scores are kept as metadata, but they are not used to create embeddings or train the current classifiers.
+
 **Remark:** It is not necessary to scale the embeddings before using them. They are already normalized and are in the vector space with a certain distribution.
 
 ### Classification
 ![CLI-classify](images/cli-classify.png)
 
 In this step, machine learning models are trained and evaluated using the provided embeddings.
+This is a supervised classification step: embeddings are the input features, and the diagnosis labels from the training set are the targets.
+
+The pipeline does not perform clustering, and it does not classify samples by direct cosine-similarity or nearest-neighbor comparison between embeddings.
+The test labels are only used after prediction to compute the final evaluation metrics.
 For comparison with other, more complex classifiers, we create a dummy classifier that makes predictions that ignore the input features.
 This gives us a baseline performance (like flipping a coin, i.e. about 50%).  
 

@@ -55,8 +55,9 @@ no_decline_data = (
 # during that period.
 
 """
-Ignore diagnosis-test & progression-test folders for now as this is for MMSE (Mini-Mental-Status-Examination) score 
-prediction, which should result in a predicted score instead of a classification of each transcript.
+The current pipeline implements the diagnosis classification task only.
+Progression/MMSE prediction paths are kept here for reference, but they are not
+used by `main.py`.
 """
 
 # processed

@@ -83,6 +83,13 @@ def tokenization(df, tokenizer):
 
 
 def create_embeddings(df):
+    """
+    Create transcript embeddings while preserving existing metadata columns.
+
+    Only the `transcript` column is sent to the embedding model. Training labels
+    and MMSE scores, when present, remain in the DataFrame for later supervised
+    classification or reporting.
+    """
     df['embedding'] = df['transcript'].apply(
         lambda x: openai.Embedding.create(input=x, engine=config.embedding_engine)['data'][0]['embedding'])
     df = df.drop('transcript', axis=1)

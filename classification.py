@@ -19,14 +19,16 @@ import config
 from config import logger
 
 """
-Create embeddings of the control group, and compare it with the embeddings of the diagnosed group.
-The text-davinci-003 model will then evaluate it.
+Train supervised classifiers on GPT text embeddings from transcribed speech.
+
+Embeddings are used as input features, and diagnosis labels are used as
+supervised targets. This module does not perform clustering or direct
+embedding-similarity classification.
 """
 
 
-# Turning the embeddings into a NumPy array, which will provide more flexibility in how to use it.
-# It will also flatten the dimension to 1-D, which is the required format for many subsequent operations.
 def embeddings_to_array(embeddings_file):
+    """Load cached embeddings and parse the CSV string representation into NumPy arrays."""
     df = pd.read_csv(embeddings_file)
     df['embedding'] = df['embedding'].apply(eval).apply(np.array)
     logger.debug(df.head())
@@ -65,11 +67,12 @@ def build_grid_search(model, name, cv):
 
 
 def cross_validation(estimator, _X, _y, _cv):
-    """ Function to perform K-Fold Cross-Validation
-    We do this to see which model proves better at predicting the test set points.
-    But once we have used cross-validation to evaluate the performance,
-    we train that model on all the data. We don't use the actual model
-    instances we trained during cross-validation for our final predictive model.
+    """Function to perform K-Fold cross-validation.
+
+    We do this to estimate how well a model generalizes on held-out validation
+    folds. After cross-validation, the final predictive model is trained again
+    on the full training set; the fold-specific model instances are not reused.
+
      Parameters
      ----------
     model: Python Class, default=None
@@ -83,7 +86,7 @@ def cross_validation(estimator, _X, _y, _cv):
      Returns
      -------
      The function returns a dictionary containing the metrics 'accuracy', 'precision',
-     'recall', 'f1' for both training set and validation set.
+     'recall', 'f1' for both training folds and validation folds.
     """
 
     scores = cross_validate(estimator=estimator,
@@ -233,7 +236,7 @@ def classify_embedding(train_data, test_data, _n_splits):
 
         # Iterate through the filenames and model predictions arrays simultaneously
         for filename, prediction in zip(test_data['addressfname'], model_predictions):
-            # Reverse binary classification
+            # Map binary model output back to the ADReSSo task label strings.
             filename_to_prediction[filename] = 'ProbableAD' if prediction == 1 else 'Control'
 
         # Fill the 'Prediction' column using the dictionary
@@ -245,7 +248,7 @@ def classify_embedding(train_data, test_data, _n_splits):
         logger.info(f"Writing {model_test_results_csv}...")
 
         # Evaluate performance on test data
-        test_metrics = evaluate_similarity(name, model_test_results)
+        test_metrics = evaluate_test_predictions(name, model_test_results)
         results_df = test_results_to_df(name, test_metrics, results_df)
 
     logger.info("Training using GPT embeddings done.")
@@ -274,7 +277,14 @@ def classify_embedding(train_data, test_data, _n_splits):
     logger.info("Classification with GPT-3 text embeddings done.")
 
 
-def evaluate_similarity(name, model_test_results):
+def evaluate_test_predictions(name, model_test_results):
+    """
+    Compare predicted test labels with the ADReSSo task 1 gold diagnoses.
+
+    The function merges model predictions with `ADReSSo/task1.csv` and
+    computes accuracy, precision, recall, and F1. It does not compare
+    embedding vectors directly.
+    """
     test_results_task1 = pd.read_csv(config.test_results_task1)
     evaluation_df = pd.merge(test_results_task1,
                              model_test_results[['ID', 'Prediction']],
@@ -306,16 +316,6 @@ def hyperparameter_optimization(X_train, y_train, cv, model, name):
     grid_search.fit(X_train, y_train)
     best_params = grid_search.best_params_
     return best_params
-
-
-#                                                            }])], ignore_index=True)
-# Save results to csv
-# models_size_file = (config.embedding_results_dir / 'embedding_models_size.csv').resolve()
-# models_size_df.to_csv(models_size_file)
-# logger.info(f"Writing {models_size_file}...")
-
-# logger.info("Classification with GPT-3 text embeddings done.")
-
 
 def param_grids():
     svc_param_grid = {

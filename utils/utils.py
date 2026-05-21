@@ -40,7 +40,13 @@ def df_to_csv(df, file_path):
 
 
 def add_train_scores(df):
-    # reading two csv files
+    """
+    Attach ADReSSo training metadata to transcript rows.
+
+    The diagnosis label is converted from the source labels (`ad`, `cn`) into
+    binary classifier targets (`1`, `0`). MMSE is retained as metadata but is
+    not used by the current classifiers.
+    """
     text_data = df
     logger.debug(text_data)
     scores_df = pd.read_csv(config.diagnosis_train_scores)
@@ -49,9 +55,8 @@ def add_train_scores(df):
     scores_df = binarize_labels(scores_df)
     logger.debug(scores_df)
 
-    # using merge function by setting how='inner'
     output = pd.merge(text_data,
-                      scores_df[['addressfname', 'mmse', 'diagnosis']],  # We don't want the key column here
+                      scores_df[['addressfname', 'mmse', 'diagnosis']],
                       on='addressfname',
                       how='inner')
 
